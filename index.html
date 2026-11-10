@@ -24,6 +24,7 @@
     <div class="header-actions">
       <button id="newJsaBtn" class="btn-icon" title="New JSA">+</button>
       <button id="savedBtn" class="btn-icon" title="Saved JSAs">📋</button>
+      <button id="forceUpdateBtn" class="btn-icon" title="Force Update">↻</button>
     </div>
   </header>
 
@@ -33,6 +34,7 @@
     <button data-view="loto" class="nav-btn">LOTO</button>
     <button data-view="journey" class="nav-btn">Journey</button>
     <button data-view="trailer" class="nav-btn">Trailer</button>
+    <button data-view="feedback" class="nav-btn">Feedback</button>
   </nav>
 
   <main>
@@ -254,7 +256,38 @@
       <button type="button" id="saveTrailerBtn" class="btn primary">Save Load Plan</button>
     </section>
 
-    <!-- Preview / Report view -->
+    <!-- Feedback View -->
+    <section id="feedbackView" class="view hidden">
+      <h2>App Feedback</h2>
+      <p class="small-note">Help us improve the N2TheStorm JSA app. Your feedback is sent to Dave@n2thestorm.com.</p>
+      <form id="feedbackForm">
+        <div class="form-section">
+          <div class="field">
+            <label>Your Name (optional)</label>
+            <input type="text" id="feedbackName" placeholder="Your name">
+          </div>
+          <div class="field">
+            <label>Feedback Type</label>
+            <select id="feedbackType">
+              <option value="Suggestion">Suggestion</option>
+              <option value="Bug">Bug / Problem</option>
+              <option value="Feature Request">Feature Request</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Your Feedback *</label>
+            <textarea id="feedbackMessage" rows="6" required placeholder="What would make the app better? Any issues you ran into?"></textarea>
+          </div>
+          <button type="submit" class="btn primary full">Send Feedback</button>
+        </div>
+      </form>
+      <div id="feedbackThanks" class="hidden" style="text-align:center; padding:2rem;">
+        <h3>Thank you!</h3>
+        <p>Your email app should have opened with the feedback pre-filled. Just hit Send.</p>
+        <button type="button" id="feedbackAgainBtn" class="btn secondary" style="margin-top:1rem;">Send Another</button>
+      </div>
+    </section>
     <section id="previewView" class="view hidden">
       <div class="preview-header">
         <h2>JSA Report</h2>
