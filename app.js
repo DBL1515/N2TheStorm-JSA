@@ -811,23 +811,70 @@ function renderEquipmentLibrary() {
   const trailers = JSON.parse(localStorage.getItem('n2thestorm_trailer_specs') || '[]');
   const items = JSON.parse(localStorage.getItem('n2thestorm_load_items') || '[]');
 
+  const builtInTrailers = [
+    "35' Gooseneck (Dual Axle)",
+    'Mesa Energy Solutions 350kW NG Generator (22L)',
+    'Mesa Energy Solutions 250kW NG Generator (14L)',
+    'Mesa Energy Solutions 170kW NG Generator (11L)'
+  ];
+  const builtInItems = [
+    'Atlas Copco PAC H108 E (PAC 108E)',
+    'Atlas Copco PAC F44 E (PAC 44E)',
+    'Atlas Copco PAC F66 E (PAC 66E)',
+    'Atlas Copco PAC F88 E (PAC 88E)'
+  ];
+
   document.getElementById('trailerLibrary').innerHTML = trailers.length
-    ? trailers.map((t, i) => `
-        <div class="jsa-card" onclick="showEquipmentDetail('trailer', ${i})">
-          <strong>${escapeHtml(t.name)}</strong><br>
-          <span class="meta">Max ${t.maxWeight || '—'} lbs • ${t.maxLength || '—'} ft long</span>
-        </div>
-      `).join('')
+    ? trailers.map((t, i) => {
+        const isBuiltIn = builtInTrailers.includes(t.name);
+        return `
+          <div class="jsa-card" onclick="showEquipmentDetail('trailer', ${i})">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                <strong>${escapeHtml(t.name)}</strong><br>
+                <span class="meta">Max ${t.maxWeight || '—'} lbs • ${t.maxLength || '—'} ft long</span>
+              </div>
+              ${isBuiltIn ? '<span class="meta" style="color:#64748b;">Built-in</span>' : `<button type="button" class="btn small secondary" onclick="event.stopPropagation(); deleteTrailer(${i})">Delete</button>`}
+            </div>
+          </div>
+        `;
+      }).join('')
     : '<p>No saved trailers yet.</p>';
 
   document.getElementById('loadItemLibrary').innerHTML = items.length
-    ? items.map((it, i) => `
-        <div class="jsa-card" onclick="showEquipmentDetail('item', ${i})">
-          <strong>${escapeHtml(it.name)}</strong><br>
-          <span class="meta">${it.weight || '—'} lbs</span>
-        </div>
-      `).join('')
+    ? items.map((it, i) => {
+        const isBuiltIn = builtInItems.includes(it.name);
+        return `
+          <div class="jsa-card" onclick="showEquipmentDetail('item', ${i})">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                <strong>${escapeHtml(it.name)}</strong><br>
+                <span class="meta">${it.weight || '—'} lbs</span>
+              </div>
+              ${isBuiltIn ? '<span class="meta" style="color:#64748b;">Built-in</span>' : `<button type="button" class="btn small secondary" onclick="event.stopPropagation(); deleteLoadItem(${i})">Delete</button>`}
+            </div>
+          </div>
+        `;
+      }).join('')
     : '<p>No saved load items yet.</p>';
+}
+
+function deleteTrailer(index) {
+  if (!confirm('Delete this trailer? This cannot be undone.')) return;
+  const all = JSON.parse(localStorage.getItem('n2thestorm_trailer_specs') || '[]');
+  all.splice(index, 1);
+  localStorage.setItem('n2thestorm_trailer_specs', JSON.stringify(all));
+  renderEquipmentLibrary();
+  renderSavedTrailers();
+}
+
+function deleteLoadItem(index) {
+  if (!confirm('Delete this load item? This cannot be undone.')) return;
+  const all = JSON.parse(localStorage.getItem('n2thestorm_load_items') || '[]');
+  all.splice(index, 1);
+  localStorage.setItem('n2thestorm_load_items', JSON.stringify(all));
+  renderEquipmentLibrary();
+  renderSavedLoadItems();
 }
 
 function showEquipmentDetail(type, index) {
