@@ -1,10 +1,11 @@
-const CACHE_NAME = 'n2thestorm-jsa-v1';
+const CACHE_NAME = 'n2thestorm-jsa-v2';
 const urlsToCache = [
   './',
   './index.html',
   './styles.css',
   './app.js',
-  './manifest.json'
+  './manifest.json',
+  './logo-header.png'
 ];
 
 self.addEventListener('install', event => {
