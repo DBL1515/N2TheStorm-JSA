@@ -827,48 +827,76 @@ function seedDefaultEquipment() {
 }
 
 function renderEquipmentLibrary() {
-  const trailers = JSON.parse(localStorage.getItem('n2thestorm_trailer_specs') || '[]');
-  const items = JSON.parse(localStorage.getItem('n2thestorm_load_items') || '[]');
-
+  // Always show built-in equipment directly so it appears even if localStorage is stale
   const builtInTrailers = [
-    "35' Gooseneck (Dual Axle)",
-    'Mesa Energy Solutions 350kW NG Generator (22L)',
-    'Mesa Energy Solutions 250kW NG Generator (14L)',
-    'Mesa Energy Solutions 170kW NG Generator (11L)'
+    { name: "35' Gooseneck (Dual Axle)", maxWeight: '36000', maxLength: '35', maxWidth: '8.5', maxHeight: '13.5', notes: 'Dual axles rated 18,000 lbs each. Trailer empty weight 7,000 lbs. Usable payload approx. 29,000 lbs.' },
+    { name: 'Mesa Energy Solutions 350kW NG Generator (22L)', maxWeight: '16989', maxLength: '22', maxWidth: '8.6', maxHeight: '10.3', notes: 'Bumper-pull trailer-mounted natural gas generator. 350 kW prime, PSI 21.9L / 22L engine. Wet weight ~16,989 lbs. Enclosure approx. 260" L × 103" W × 124" H.' },
+    { name: 'Mesa Energy Solutions 250kW NG Generator (14L)', maxWeight: '15289', maxLength: '22', maxWidth: '8.6', maxHeight: '10.3', notes: 'Bumper-pull trailer-mounted natural gas generator. 250 kW prime, PSI 14.6L engine. Wet weight ~15,289 lbs. Enclosure approx. 260" L × 103" W × 124" H.' },
+    { name: 'Mesa Energy Solutions 170kW NG Generator (11L)', maxWeight: '10929', maxLength: '23', maxWidth: '7.3', maxHeight: '9.7', notes: 'Bumper-pull trailer-mounted natural gas generator. 170 kW prime, PSI 11.1L engine. Wet weight ~10,929 lbs. Enclosure approx. 272" L × 87" W × 116" H.' }
   ];
+
   const builtInItems = [
-    'Atlas Copco PAC H108 E (PAC 108E)',
-    'Atlas Copco PAC F44 E (PAC 44E)',
-    'Atlas Copco PAC F66 E (PAC 66E)',
-    'Atlas Copco PAC F88 E (PAC 88E)'
+    { name: 'Atlas Copco PAC H108 E (PAC 108E)', weight: '7350', length: '10', width: '6', height: '5.5', notes: '350 HP electric boost pump. Max flow 6,400 USgpm, max head 360 ft. 10" suction / 8" discharge. Dry weight ~7,350 lbs. Dimensions approx. 10 ft L × 6 ft W × 5.5 ft H.' },
+    { name: 'Atlas Copco PAC F44 E (PAC 44E)', weight: '2755', length: '7.8', width: '5.7', height: '3.7', notes: '50 HP electric pump. Max flow ~1,300 USgpm, max head ~150 ft. 4" suction / 4" discharge. Dry weight ~2,755 lbs. Dimensions approx. 7.8 ft L × 5.7 ft W × 3.7 ft H.' },
+    { name: 'Atlas Copco PAC F66 E (PAC 66E)', weight: '3415', length: '7.8', width: '5.7', height: '3.9', notes: '75 HP electric pump. Max flow 2,640 USgpm, max head 166 ft. 6" suction / 6" discharge. Dry weight ~3,415 lbs. Dimensions approx. 7.8 ft L × 5.7 ft W × 3.9 ft H.' },
+    { name: 'Atlas Copco PAC F88 E (PAC 88E)', weight: '4520', length: '7.8', width: '5.7', height: '4.4', notes: '150 HP electric pump. Max flow 3,950 USgpm, max head 200 ft. 8" suction / 8" discharge. Dry weight ~4,520 lbs. Dimensions approx. 7.8 ft L × 5.7 ft W × 4.4 ft H.' }
   ];
 
-  const builtInTrailerList = trailers.filter(t => builtInTrailers.includes(t.name));
-  const builtInItemList = items.filter(it => builtInItems.includes(it.name));
+  document.getElementById('trailerLibrary').innerHTML = builtInTrailers.map((t, i) => `
+    <div class="jsa-card" onclick="showBuiltInDetail('trailer', ${i})">
+      <strong>${escapeHtml(t.name)}</strong><br>
+      <span class="meta">Max ${t.maxWeight || '—'} lbs • ${t.maxLength || '—'} ft long</span>
+    </div>
+  `).join('');
 
-  document.getElementById('trailerLibrary').innerHTML = builtInTrailerList.length
-    ? builtInTrailerList.map((t) => {
-        const realIndex = trailers.findIndex(x => x.name === t.name);
-        return `
-          <div class="jsa-card" onclick="showEquipmentDetail('trailer', ${realIndex})">
-            <strong>${escapeHtml(t.name)}</strong><br>
-            <span class="meta">Max ${t.maxWeight || '—'} lbs • ${t.maxLength || '—'} ft long</span>
-          </div>
-        `;
-      }).join('')
-    : '<p>No built-in trailers loaded.</p>';
+  document.getElementById('loadItemLibrary').innerHTML = builtInItems.map((it, i) => `
+    <div class="jsa-card" onclick="showBuiltInDetail('item', ${i})">
+      <strong>${escapeHtml(it.name)}</strong><br>
+      <span class="meta">${it.weight || '—'} lbs</span>
+    </div>
+  `).join('');
+}
 
-  document.getElementById('loadItemLibrary').innerHTML = builtInItemList.length
-    ? builtInItemList.map((it) => {
-        const realIndex = items.findIndex(x => x.name === it.name);
-        return `
-          <div class="jsa-card" onclick="showEquipmentDetail('item', ${realIndex})">
-            <strong>${escapeHtml(it.name)}</strong><br>
-            <span class="meta">${it.weight || '—'} lbs</span>
-          </div>
-        `;
-      }).join('')
-    : '<p>No built-in load items loaded.</p>';
+function showBuiltInDetail(type, index) {
+  const trailers = [
+    { name: "35' Gooseneck (Dual Axle)", maxWeight: '36000', maxLength: '35', maxWidth: '8.5', maxHeight: '13.5', notes: 'Dual axles rated 18,000 lbs each. Trailer empty weight 7,000 lbs. Usable payload approx. 29,000 lbs.' },
+    { name: 'Mesa Energy Solutions 350kW NG Generator (22L)', maxWeight: '16989', maxLength: '22', maxWidth: '8.6', maxHeight: '10.3', notes: 'Bumper-pull trailer-mounted natural gas generator. 350 kW prime, PSI 21.9L / 22L engine. Wet weight ~16,989 lbs. Enclosure approx. 260" L × 103" W × 124" H.' },
+    { name: 'Mesa Energy Solutions 250kW NG Generator (14L)', maxWeight: '15289', maxLength: '22', maxWidth: '8.6', maxHeight: '10.3', notes: 'Bumper-pull trailer-mounted natural gas generator. 250 kW prime, PSI 14.6L engine. Wet weight ~15,289 lbs. Enclosure approx. 260" L × 103" W × 124" H.' },
+    { name: 'Mesa Energy Solutions 170kW NG Generator (11L)', maxWeight: '10929', maxLength: '23', maxWidth: '7.3', maxHeight: '9.7', notes: 'Bumper-pull trailer-mounted natural gas generator. 170 kW prime, PSI 11.1L engine. Wet weight ~10,929 lbs. Enclosure approx. 272" L × 87" W × 116" H.' }
+  ];
+  const items = [
+    { name: 'Atlas Copco PAC H108 E (PAC 108E)', weight: '7350', length: '10', width: '6', height: '5.5', notes: '350 HP electric boost pump. Max flow 6,400 USgpm, max head 360 ft. 10" suction / 8" discharge. Dry weight ~7,350 lbs. Dimensions approx. 10 ft L × 6 ft W × 5.5 ft H.' },
+    { name: 'Atlas Copco PAC F44 E (PAC 44E)', weight: '2755', length: '7.8', width: '5.7', height: '3.7', notes: '50 HP electric pump. Max flow ~1,300 USgpm, max head ~150 ft. 4" suction / 4" discharge. Dry weight ~2,755 lbs. Dimensions approx. 7.8 ft L × 5.7 ft W × 3.7 ft H.' },
+    { name: 'Atlas Copco PAC F66 E (PAC 66E)', weight: '3415', length: '7.8', width: '5.7', height: '3.9', notes: '75 HP electric pump. Max flow 2,640 USgpm, max head 166 ft. 6" suction / 6" discharge. Dry weight ~3,415 lbs. Dimensions approx. 7.8 ft L × 5.7 ft W × 3.9 ft H.' },
+    { name: 'Atlas Copco PAC F88 E (PAC 88E)', weight: '4520', length: '7.8', width: '5.7', height: '4.4', notes: '150 HP electric pump. Max flow 3,950 USgpm, max head 200 ft. 8" suction / 8" discharge. Dry weight ~4,520 lbs. Dimensions approx. 7.8 ft L × 5.7 ft W × 4.4 ft H.' }
+  ];
+  const item = type === 'trailer' ? trailers[index] : items[index];
+  if (!item) return;
+
+  const title = document.getElementById('modalTitle');
+  const body = document.getElementById('modalBody');
+  title.textContent = item.name;
+
+  let html = '';
+  if (type === 'trailer') {
+    html = `
+      <p><strong>Max Weight Capacity:</strong> ${item.maxWeight || '—'} lbs</p>
+      <p><strong>Length:</strong> ${item.maxLength || '—'} ft</p>
+      <p><strong>Width:</strong> ${item.maxWidth || '—'} ft</p>
+      <p><strong>Height:</strong> ${item.maxHeight || '—'} ft</p>
+      ${item.notes ? `<p style="margin-top:0.75rem;">${escapeHtml(item.notes)}</p>` : ''}
+    `;
+  } else {
+    html = `
+      <p><strong>Weight:</strong> ${item.weight || '—'} lbs</p>
+      <p><strong>Length:</strong> ${item.length || '—'} ft</p>
+      <p><strong>Width:</strong> ${item.width || '—'} ft</p>
+      <p><strong>Height:</strong> ${item.height || '—'} ft</p>
+      ${item.notes ? `<p style="margin-top:0.75rem;">${escapeHtml(item.notes)}</p>` : ''}
+    `;
+  }
+  body.innerHTML = html;
+  document.getElementById('equipmentModal').classList.remove('hidden');
 }
 
 function showManageTrailers() {
