@@ -29,7 +29,7 @@
   </header>
 
   <nav class="app-nav">
-    <button data-view="list" class="nav-btn active">My JSAs</button>
+    <button data-view="list" class="nav-btn active">Saved Docs</button>
     <button data-view="form" class="nav-btn">JSA Form</button>
     <button data-view="loto" class="nav-btn">LOTO</button>
     <button data-view="journey" class="nav-btn">Journey</button>
@@ -162,8 +162,11 @@
             <input type="text" id="lotoEquipment" placeholder="Equipment name or ID">
           </div>
           <div class="field">
-            <label>Authorized Personnel (names & signatures)</label>
-            <textarea id="lotoPersonnel" rows="3" placeholder="Name - Signature (type name)"></textarea>
+            <label>Authorized Personnel Signature (sign with finger)</label>
+            <div class="signature-box">
+              <canvas id="lotoSignatureCanvas" width="350" height="120"></canvas>
+              <button type="button" id="clearLotoSignatureBtn" class="btn small secondary">Clear Signature</button>
+            </div>
           </div>
           <div class="field-row">
             <div class="field">
@@ -211,12 +214,31 @@
         </div>
         <div class="form-section">
           <h3>Route & Itinerary</h3>
-          <div class="field"><label>Departure Point</label><input type="text" id="journeyDepart"></div>
-          <div class="field"><label>Destination</label><input type="text" id="journeyDest"></div>
+          <div class="field">
+            <label>Departure Point</label>
+            <input type="text" id="journeyDepart" placeholder="Address, coordinates, or place name">
+            <div style="margin-top:0.4rem; display:flex; gap:0.4rem; flex-wrap:wrap;">
+              <button type="button" id="departGpsBtn" class="btn small secondary">Use Current GPS</button>
+              <button type="button" id="departMapsBtn" class="btn small secondary">Open in Google Maps</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>Destination</label>
+            <input type="text" id="journeyDest" placeholder="Address, coordinates, or place name">
+            <div style="margin-top:0.4rem; display:flex; gap:0.4rem; flex-wrap:wrap;">
+              <button type="button" id="destGpsBtn" class="btn small secondary">Use Current GPS</button>
+              <button type="button" id="destMapsBtn" class="btn small secondary">Open in Google Maps</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>Route / Directions</label>
+            <textarea id="journeyRoute" rows="2" placeholder="Will auto-fill from Google Maps when possible, or type manually"></textarea>
+            <button type="button" id="getDirectionsBtn" class="btn small" style="margin-top:0.4rem;">Get Google Maps Directions</button>
+          </div>
           <div class="field"><label>Planned Stops</label><input type="text" id="journeyStops"></div>
           <div class="field-row">
             <div class="field"><label>Scheduled Departure</label><input type="datetime-local" id="journeyDepartTime"></div>
-            <div class="field"><label>ETA</label><input type="datetime-local" id="journeyEta"></div>
+            <div class="field"><label>Arrival Time</label><input type="datetime-local" id="journeyEta"></div>
           </div>
         </div>
         <div class="form-section">
@@ -224,6 +246,13 @@
           <label class="ppe-item"><input type="checkbox" id="checkFluids"> Fluids, tires, brakes, lights OK</label>
           <label class="ppe-item"><input type="checkbox" id="checkSafety"> First aid, extinguisher, vests, triangles present</label>
           <label class="ppe-item"><input type="checkbox" id="checkRecovery"> Recovery gear / weather kit as needed</label>
+        </div>
+        <div class="form-section">
+          <h3>Trailer Safety Checklist</h3>
+          <label class="ppe-item"><input type="checkbox" id="trailerLights"> Trailer lights & brakes functional</label>
+          <label class="ppe-item"><input type="checkbox" id="trailerTires"> Trailer tires & pressure OK</label>
+          <label class="ppe-item"><input type="checkbox" id="trailerHitch"> Hitch, chains, and safety cables secure</label>
+          <label class="ppe-item"><input type="checkbox" id="trailerLoad"> Load secured and within capacity</label>
         </div>
         <div class="form-section">
           <h3>Communication & ERP</h3>
@@ -234,6 +263,16 @@
 
         <div class="form-section">
           <h3>Trailer Load Planning</h3>
+          <div class="field">
+            <label>Saved Trailers</label>
+            <select id="savedTrailerSelect">
+              <option value="">— Select a saved trailer or enter new —</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Trailer Name / ID (for saving)</label>
+            <input type="text" id="trailerName" placeholder="e.g. Flatbed 12, Gooseneck 24">
+          </div>
           <div class="field-row">
             <div class="field"><label>Max Weight Capacity (lbs)</label><input type="number" id="trailerMaxWeight" placeholder="e.g. 10000"></div>
             <div class="field"><label>Max Length (ft)</label><input type="number" id="trailerMaxLength" step="0.1"></div>
@@ -242,6 +281,7 @@
             <div class="field"><label>Max Width (ft)</label><input type="number" id="trailerMaxWidth" step="0.1"></div>
             <div class="field"><label>Max Height (ft)</label><input type="number" id="trailerMaxHeight" step="0.1"></div>
           </div>
+          <button type="button" id="saveTrailerSpecBtn" class="btn small secondary" style="margin-bottom:0.75rem;">Save These Trailer Specs</button>
           <h4 style="margin:1rem 0 0.5rem;">Load Items</h4>
           <div id="trailerItemsContainer"></div>
           <button type="button" id="addTrailerItemBtn" class="btn small">+ Add Item</button>

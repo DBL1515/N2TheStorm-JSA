@@ -51,8 +51,10 @@ document.addEventListener('DOMContentLoaded', () => {
   renderList();
   renderLotoList();
   renderJourneyList();
+  renderSavedTrailers();
   setupEventListeners();
   initSignaturePad();
+  initLotoSignaturePad();
   registerServiceWorker();
   addParticipant();
   requestLocation(); // auto-request on load
@@ -69,7 +71,12 @@ function setDefaultDates() {
 function setupEventListeners() {
   document.getElementById('newJsaBtn').onclick = startNew;
   document.getElementById('startNewBtn').onclick = startNew;
-  document.getElementById('savedBtn').onclick = () => showView('list');
+  document.getElementById('savedBtn').onclick = () => {
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+    document.querySelector('[data-view="list"]').classList.add('active');
+    showView('list');
+    renderList();
+  };
   document.getElementById('saveDraftBtn').onclick = saveDraft;
   document.getElementById('previewBtn').onclick = showPreview;
   document.getElementById('printBtn').onclick = () => window.print();
@@ -92,7 +99,15 @@ function setupEventListeners() {
   document.getElementById('saveLotoBtn').onclick = saveLoto;
   document.getElementById('saveJourneyBtn').onclick = saveJourney;
   document.getElementById('addTrailerItemBtn').onclick = addTrailerItem;
+  document.getElementById('saveTrailerSpecBtn').onclick = saveTrailerSpec;
+  document.getElementById('savedTrailerSelect').onchange = loadSavedTrailer;
+  document.getElementById('departGpsBtn').onclick = () => fillGps('journeyDepart');
+  document.getElementById('destGpsBtn').onclick = () => fillGps('journeyDest');
+  document.getElementById('departMapsBtn').onclick = () => openMaps('journeyDepart');
+  document.getElementById('destMapsBtn').onclick = () => openMaps('journeyDest');
+  document.getElementById('getDirectionsBtn').onclick = openDirections;
   document.getElementById('clearSignatureBtn').onclick = clearSignature;
+  document.getElementById('clearLotoSignatureBtn').onclick = clearLotoSignature;
 
   // Nav
   document.querySelectorAll('.nav-btn').forEach(btn => {
@@ -145,7 +160,7 @@ function toggleHazard(id) {
   const checked = document.querySelector(`#hazardCheckboxes input[value="${id}"]`).checked;
   if (checked) {
     if (!selectedHazards.find(s => s.id === id)) {
-      selectedHazards.push({ ...haz, residualRisk: haz.defaultRisk });
+      selectedHazards.push({ ...haz, residualRisk: 'Low' });
     }
   } else {
     selectedHazards = selectedHazards.filter(s => s.id !== id);
@@ -162,11 +177,7 @@ function renderSelectedHazards() {
       <p><strong>Controls:</strong> ${h.controls}</p>
       <div class="field">
         <label>Residual Risk After Controls</label>
-        <div class="risk-select">
-          <label><input type="radio" name="residual_${h.id}" value="Low" ${h.residualRisk==='Low'?'checked':''} onchange="updateResidual('${h.id}','Low')"> Low</label>
-          <label><input type="radio" name="residual_${h.id}" value="Medium" ${h.residualRisk==='Medium'?'checked':''} onchange="updateResidual('${h.id}','Medium')"> Medium</label>
-          <label><input type="radio" name="residual_${h.id}" value="High" ${h.residualRisk==='High'?'checked':''} onchange="updateResidual('${h.id}','High')"> High</label>
-        </div>
+        <div class="risk-badge risk-low" style="display:inline-block; padding:0.4rem 0.8rem;">Low</div>
       </div>
     </div>
   `).join('');
@@ -244,6 +255,36 @@ function initSignaturePad() {
   signaturePad = { canvas, ctx };
 }
 
+function initLotoSignaturePad() {
+  const canvas = document.getElementById('lotoSignatureCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  let drawing = false;
+  function getPos(e) {
+    const rect = canvas.getBoundingClientRect();
+    const touch = e.touches ? e.touches[0] : e;
+    return { x: (touch.clientX - rect.left) * (canvas.width / rect.width), y: (touch.clientY - rect.top) * (canvas.height / rect.height) };
+  }
+  function start(e) { drawing = true; const p = getPos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); e.preventDefault(); }
+  function move(e) { if (!drawing) return; const p = getPos(e); ctx.lineTo(p.x, p.y); ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.stroke(); e.preventDefault(); }
+  function end() { drawing = false; }
+  canvas.addEventListener('mousedown', start);
+  canvas.addEventListener('mousemove', move);
+  canvas.addEventListener('mouseup', end);
+  canvas.addEventListener('touchstart', start, { passive: false });
+  canvas.addEventListener('touchmove', move, { passive: false });
+  canvas.addEventListener('touchend', end);
+  window.lotoSignaturePad = { canvas, ctx };
+}
+
+function clearLotoSignature() {
+  if (window.lotoSignaturePad) window.lotoSignaturePad.ctx.clearRect(0, 0, window.lotoSignaturePad.canvas.width, window.lotoSignaturePad.canvas.height);
+}
+
+function getLotoSignature() {
+  return window.lotoSignaturePad ? window.lotoSignaturePad.canvas.toDataURL('image/png') : '';
+}
+
 function clearSignature() {
   if (!signaturePad) return;
   signaturePad.ctx.clearRect(0, 0, signaturePad.canvas.width, signaturePad.canvas.height);
@@ -298,14 +339,24 @@ async function loadNearbyHospitals(lat, lon) {
     const data = await res.json();
 
     const hospitals = (data.elements || [])
-      .map(e => e.tags && e.tags.name)
+      .map(e => {
+        const name = e.tags && e.tags.name;
+        if (!name) return null;
+        const elat = e.lat || (e.center && e.center.lat);
+        const elon = e.lon || (e.center && e.center.lon);
+        let dist = 999999;
+        if (elat && elon) {
+          dist = Math.sqrt(Math.pow(elat - lat, 2) + Math.pow(elon - lon, 2));
+        }
+        return { name, dist };
+      })
       .filter(Boolean)
-      .filter((name, i, arr) => arr.indexOf(name) === i) // unique
-      .slice(0, 25)
-      .sort();
+      .filter((h, i, arr) => arr.findIndex(x => x.name === h.name) === i)
+      .sort((a, b) => a.dist - b.dist)
+      .slice(0, 25);
 
     let options = '<option value="">Select nearest hospital...</option>';
-    options += hospitals.map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('');
+    options += hospitals.map(h => `<option value="${escapeHtml(h.name)}">${escapeHtml(h.name)}</option>`).join('');
     options += '<option value="__manual__">— Enter hospital manually —</option>';
     select.innerHTML = options;
 
@@ -458,16 +509,46 @@ function getAllJsas() {
 }
 
 function renderList() {
-  const all = getAllJsas();
-  jsaList.innerHTML = all.length ? all.map(j => `
-    <div class="jsa-card" onclick="loadJsa('${j.id}')">
-      <h4>${escapeHtml(j.jobName)}</h4>
-      <div class="meta">
-        <span>${j.jobDate || ''}</span>
-        <span class="status-badge status-${(j.status||'draft').toLowerCase()}">${j.status || 'Draft'}</span>
+  const jsas = getAllJsas();
+  const lotos = JSON.parse(localStorage.getItem(LOTO_KEY) || '[]');
+  const journeys = JSON.parse(localStorage.getItem(JOURNEY_KEY) || '[]');
+
+  let html = '';
+
+  if (jsas.length) {
+    html += '<h3 style="margin:1rem 0 0.5rem; font-size:1rem;">JSAs</h3>';
+    html += jsas.map(j => `
+      <div class="jsa-card" onclick="loadJsa('${j.id}')">
+        <h4>${escapeHtml(j.jobName)}</h4>
+        <div class="meta">
+          <span>${j.jobDate || ''}</span>
+          <span class="status-badge status-${(j.status||'draft').toLowerCase()}">${j.status || 'Draft'}</span>
+        </div>
       </div>
-    </div>
-  `).join('') : '<p>No saved JSAs yet.</p>';
+    `).join('');
+  }
+
+  if (lotos.length) {
+    html += '<h3 style="margin:1rem 0 0.5rem; font-size:1rem;">LOTO Records</h3>';
+    html += lotos.map(r => `
+      <div class="jsa-card" onclick="loadLoto('${r.id}')">
+        <strong>${escapeHtml(r.equipment||'Untitled LOTO')}</strong><br>
+        <span class="meta">Applied: ${r.applied||'—'} | Removed: ${r.removed||'—'}</span>
+      </div>
+    `).join('');
+  }
+
+  if (journeys.length) {
+    html += '<h3 style="margin:1rem 0 0.5rem; font-size:1rem;">Journey Plans</h3>';
+    html += journeys.map(r => `
+      <div class="jsa-card" onclick="loadJourney('${r.id}')">
+        <strong>${escapeHtml(r.driver||'Untitled')} → ${escapeHtml(r.dest||'')}</strong><br>
+        <span class="meta">${new Date(r.savedAt).toLocaleDateString()}</span>
+      </div>
+    `).join('');
+  }
+
+  jsaList.innerHTML = html || '<p>No saved documents yet.</p>';
 }
 
 function loadJsa(id) {
@@ -522,12 +603,14 @@ function loadJsa(id) {
   document.querySelector('[data-view="form"]').classList.add('active');
 }
 
+let currentLotoId = null;
+
 // LOTO
 function saveLoto() {
   const rec = {
-    id: Date.now().toString(),
+    id: currentLotoId || Date.now().toString(),
     equipment: document.getElementById('lotoEquipment').value,
-    personnel: document.getElementById('lotoPersonnel').value,
+    signature: getLotoSignature(),
     applied: document.getElementById('lotoApplied').value,
     removed: document.getElementById('lotoRemoved').value,
     serials: document.getElementById('lotoSerials').value,
@@ -535,48 +618,168 @@ function saveLoto() {
     savedAt: new Date().toISOString()
   };
   const all = JSON.parse(localStorage.getItem(LOTO_KEY) || '[]');
-  all.unshift(rec);
+  const idx = all.findIndex(r => r.id === rec.id);
+  if (idx >= 0) all[idx] = rec; else all.unshift(rec);
   localStorage.setItem(LOTO_KEY, JSON.stringify(all));
+  currentLotoId = null;
   document.getElementById('lotoForm').reset();
+  clearLotoSignature();
   renderLotoList();
   alert('LOTO record saved.');
 }
 
 function renderLotoList() {
   const all = JSON.parse(localStorage.getItem(LOTO_KEY) || '[]');
-  document.getElementById('lotoList').innerHTML = all.length ? '<h3>Saved LOTO Records</h3>' + all.map(r => `
-    <div class="jsa-card"><strong>${escapeHtml(r.equipment||'Untitled')}</strong><br>
-    Applied: ${r.applied||'—'} | Removed: ${r.removed||'—'}<br>
-    <small>${new Date(r.savedAt).toLocaleString()}</small></div>
-  `).join('') : '';
+  document.getElementById('lotoList').innerHTML = all.length ? '<h3>Saved LOTO Records</h3><p class="small-note">Tap a record to open and edit it. Note: records are stored on this device only.</p>' + all.map(r => `
+    <div class="jsa-card" onclick="loadLoto('${r.id}')">
+      <strong>${escapeHtml(r.equipment||'Untitled')}</strong><br>
+      Applied: ${r.applied||'—'} | Removed: ${r.removed||'—'}<br>
+      <small>${new Date(r.savedAt).toLocaleString()}</small>
+    </div>
+  `).join('') : '<p class="small-note">No LOTO records yet. Records are stored on this device only.</p>';
+}
+
+function loadLoto(id) {
+  const all = JSON.parse(localStorage.getItem(LOTO_KEY) || '[]');
+  const r = all.find(x => x.id === id);
+  if (!r) return;
+  currentLotoId = id;
+  document.getElementById('lotoEquipment').value = r.equipment || '';
+  document.getElementById('lotoApplied').value = r.applied || '';
+  document.getElementById('lotoRemoved').value = r.removed || '';
+  document.getElementById('lotoSerials').value = r.serials || '';
+  document.getElementById('lotoHandover').value = r.handover || '';
+  if (r.signature && window.lotoSignaturePad) {
+    const img = new Image();
+    img.onload = () => window.lotoSignaturePad.ctx.drawImage(img, 0, 0);
+    img.src = r.signature;
+  }
+  showView('loto');
 }
 
 // Journey
+function fillGps(fieldId) {
+  if (!navigator.geolocation) { alert('Geolocation not available'); return; }
+  navigator.geolocation.getCurrentPosition(pos => {
+    document.getElementById(fieldId).value = `${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}`;
+  }, () => alert('Could not get location'));
+}
+
+function openMaps(fieldId) {
+  const val = document.getElementById(fieldId).value.trim();
+  const q = val || 'current location';
+  window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`, '_blank');
+}
+
+function openDirections() {
+  const from = document.getElementById('journeyDepart').value.trim();
+  const to = document.getElementById('journeyDest').value.trim();
+  if (!from || !to) { alert('Enter both departure and destination first.'); return; }
+  const url = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(from)}&destination=${encodeURIComponent(to)}`;
+  window.open(url, '_blank');
+  document.getElementById('journeyRoute').value = `Directions opened in Google Maps from "${from}" to "${to}".`;
+}
+
+function saveTrailerSpec() {
+  const name = document.getElementById('trailerName').value.trim();
+  if (!name) { alert('Enter a trailer name to save.'); return; }
+  const spec = {
+    name,
+    maxWeight: document.getElementById('trailerMaxWeight').value,
+    maxLength: document.getElementById('trailerMaxLength').value,
+    maxWidth: document.getElementById('trailerMaxWidth').value,
+    maxHeight: document.getElementById('trailerMaxHeight').value
+  };
+  const all = JSON.parse(localStorage.getItem('n2thestorm_trailer_specs') || '[]');
+  const idx = all.findIndex(t => t.name === name);
+  if (idx >= 0) all[idx] = spec; else all.push(spec);
+  localStorage.setItem('n2thestorm_trailer_specs', JSON.stringify(all));
+  renderSavedTrailers();
+  alert('Trailer specs saved.');
+}
+
+function renderSavedTrailers() {
+  const select = document.getElementById('savedTrailerSelect');
+  const all = JSON.parse(localStorage.getItem('n2thestorm_trailer_specs') || '[]');
+  select.innerHTML = '<option value="">— Select a saved trailer or enter new —</option>' +
+    all.map(t => `<option value="${escapeHtml(t.name)}">${escapeHtml(t.name)}</option>`).join('');
+}
+
+function loadSavedTrailer() {
+  const name = document.getElementById('savedTrailerSelect').value;
+  if (!name) return;
+  const all = JSON.parse(localStorage.getItem('n2thestorm_trailer_specs') || '[]');
+  const t = all.find(x => x.name === name);
+  if (!t) return;
+  document.getElementById('trailerName').value = t.name;
+  document.getElementById('trailerMaxWeight').value = t.maxWeight || '';
+  document.getElementById('trailerMaxLength').value = t.maxLength || '';
+  document.getElementById('trailerMaxWidth').value = t.maxWidth || '';
+  document.getElementById('trailerMaxHeight').value = t.maxHeight || '';
+}
+
+let currentJourneyId = null;
+
 function saveJourney() {
   const rec = {
-    id: Date.now().toString(),
+    id: currentJourneyId || Date.now().toString(),
     driver: document.getElementById('journeyDriver').value,
     passengers: document.getElementById('journeyPassengers').value,
     vehicle: document.getElementById('journeyVehicle').value,
     plate: document.getElementById('journeyPlate').value,
     depart: document.getElementById('journeyDepart').value,
     dest: document.getElementById('journeyDest').value,
+    route: document.getElementById('journeyRoute').value,
+    stops: document.getElementById('journeyStops').value,
+    departTime: document.getElementById('journeyDepartTime').value,
+    arrival: document.getElementById('journeyEta').value,
+    trailerName: document.getElementById('trailerName').value,
+    maxWeight: document.getElementById('trailerMaxWeight').value,
+    items: [...trailerItems],
     savedAt: new Date().toISOString()
   };
   const all = JSON.parse(localStorage.getItem(JOURNEY_KEY) || '[]');
-  all.unshift(rec);
+  const idx = all.findIndex(r => r.id === rec.id);
+  if (idx >= 0) all[idx] = rec; else all.unshift(rec);
   localStorage.setItem(JOURNEY_KEY, JSON.stringify(all));
+  currentJourneyId = null;
   document.getElementById('journeyForm').reset();
+  trailerItems = [];
+  renderTrailerItems();
   renderJourneyList();
   alert('Journey plan saved.');
 }
 
 function renderJourneyList() {
   const all = JSON.parse(localStorage.getItem(JOURNEY_KEY) || '[]');
-  document.getElementById('journeyList').innerHTML = all.length ? '<h3>Saved Journeys</h3>' + all.map(r => `
-    <div class="jsa-card"><strong>${escapeHtml(r.driver||'Untitled')} → ${escapeHtml(r.dest||'')}</strong><br>
-    <small>${new Date(r.savedAt).toLocaleString()}</small></div>
+  document.getElementById('journeyList').innerHTML = all.length ? '<h3>Saved Journeys</h3><p class="small-note">Tap a journey to open and edit it.</p>' + all.map(r => `
+    <div class="jsa-card" onclick="loadJourney('${r.id}')">
+      <strong>${escapeHtml(r.driver||'Untitled')} → ${escapeHtml(r.dest||'')}</strong><br>
+      <small>${new Date(r.savedAt).toLocaleString()}</small>
+    </div>
   `).join('') : '';
+}
+
+function loadJourney(id) {
+  const all = JSON.parse(localStorage.getItem(JOURNEY_KEY) || '[]');
+  const r = all.find(x => x.id === id);
+  if (!r) return;
+  currentJourneyId = id;
+  document.getElementById('journeyDriver').value = r.driver || '';
+  document.getElementById('journeyPassengers').value = r.passengers || '';
+  document.getElementById('journeyVehicle').value = r.vehicle || '';
+  document.getElementById('journeyPlate').value = r.plate || '';
+  document.getElementById('journeyDepart').value = r.depart || '';
+  document.getElementById('journeyDest').value = r.dest || '';
+  document.getElementById('journeyRoute').value = r.route || '';
+  document.getElementById('journeyStops').value = r.stops || '';
+  document.getElementById('journeyDepartTime').value = r.departTime || '';
+  document.getElementById('journeyEta').value = r.arrival || '';
+  document.getElementById('trailerName').value = r.trailerName || '';
+  document.getElementById('trailerMaxWeight').value = r.maxWeight || '';
+  trailerItems = r.items || [];
+  renderTrailerItems();
+  showView('journey');
 }
 
 // Trailer
