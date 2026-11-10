@@ -40,6 +40,7 @@ const previewView = document.getElementById('previewView');
 const lotoView = document.getElementById('lotoView');
 const journeyView = document.getElementById('journeyView');
 const trailerView = document.getElementById('trailerView');
+const feedbackView = document.getElementById('feedbackView');
 const jsaList = document.getElementById('jsaList');
 const form = document.getElementById('jsaForm');
 
@@ -70,7 +71,19 @@ function setupEventListeners() {
   document.getElementById('previewBtn').onclick = showPreview;
   document.getElementById('printBtn').onclick = () => window.print();
   document.getElementById('backToFormBtn').onclick = () => showView('form');
+  document.getElementById('forceUpdateBtn').onclick = forceUpdate;
   form.onsubmit = (e) => { e.preventDefault(); completeAndExport(); };
+
+  // Feedback form
+  document.getElementById('feedbackForm').onsubmit = (e) => {
+    e.preventDefault();
+    sendFeedback();
+  };
+  document.getElementById('feedbackAgainBtn').onclick = () => {
+    document.getElementById('feedbackForm').classList.remove('hidden');
+    document.getElementById('feedbackThanks').classList.add('hidden');
+    document.getElementById('feedbackForm').reset();
+  };
 
   document.getElementById('addParticipantBtn').onclick = () => addParticipant();
   document.getElementById('getLocationBtn').onclick = getLocation;
@@ -91,13 +104,14 @@ function setupEventListeners() {
 }
 
 function showView(view) {
-  [listView, formView, previewView, lotoView, journeyView, trailerView].forEach(v => v.classList.add('hidden'));
+  [listView, formView, previewView, lotoView, journeyView, trailerView, feedbackView].forEach(v => v && v.classList.add('hidden'));
   if (view === 'list') listView.classList.remove('hidden');
   if (view === 'form') formView.classList.remove('hidden');
   if (view === 'preview') previewView.classList.remove('hidden');
   if (view === 'loto') lotoView.classList.remove('hidden');
   if (view === 'journey') journeyView.classList.remove('hidden');
   if (view === 'trailer') trailerView.classList.remove('hidden');
+  if (view === 'feedback') feedbackView.classList.remove('hidden');
   window.scrollTo(0, 0);
 }
 
@@ -274,6 +288,7 @@ function completeAndExport() {
   if (idx >= 0) all[idx] = data; else all.unshift(data);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
   currentJsaId = data.id;
+  renderList();          // <-- refresh the list so completed JSAs appear
   showPreview();
 }
 
@@ -522,6 +537,51 @@ function saveTrailer() {
 function escapeHtml(str) {
   if (!str) return '';
   return String(str).replace(/[&<>"']/g, m => ({'&':'&','<':'<','>':'>','"':'"',"'":'&#39;'}[m]));
+}
+
+function sendFeedback() {
+  const name = document.getElementById('feedbackName').value.trim() || 'Anonymous';
+  const type = document.getElementById('feedbackType').value;
+  const message = document.getElementById('feedbackMessage').value.trim();
+  if (!message) {
+    alert('Please enter your feedback.');
+    return;
+  }
+
+  const subject = encodeURIComponent(`JSA App Feedback: ${type}`);
+  const body = encodeURIComponent(
+    `Feedback Type: ${type}\n` +
+    `From: ${name}\n` +
+    `Date: ${new Date().toLocaleString()}\n\n` +
+    `Message:\n${message}\n\n` +
+    `---\nSent from N2TheStorm JSA App`
+  );
+
+  const mailto = `mailto:Dave@n2thestorm.com?subject=${subject}&body=${body}`;
+  window.location.href = mailto;
+
+  // Show thank you
+  document.getElementById('feedbackForm').classList.add('hidden');
+  document.getElementById('feedbackThanks').classList.remove('hidden');
+
+  // Optional: store locally
+  try {
+    const all = JSON.parse(localStorage.getItem('n2thestorm_feedback') || '[]');
+    all.unshift({ name, type, message, date: new Date().toISOString() });
+    localStorage.setItem('n2thestorm_feedback', JSON.stringify(all.slice(0, 50)));
+  } catch (e) {}
+}
+  if (!confirm('Force update the app? This will clear the cache and reload the latest version.')) return;
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations().then(regs => {
+      regs.forEach(reg => reg.unregister());
+    }).then(() => {
+      caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k))))
+        .then(() => location.reload(true));
+    });
+  } else {
+    location.reload(true);
+  }
 }
 
 function registerServiceWorker() {
