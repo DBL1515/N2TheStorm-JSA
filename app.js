@@ -775,13 +775,6 @@ function seedDefaultEquipment() {
     }
   ];
 
-  const existingTrailers = JSON.parse(localStorage.getItem(trailerKey) || '[]');
-  const existingTrailerNames = existingTrailers.map(t => t.name);
-  const trailersToAdd = defaultTrailers.filter(d => !existingTrailerNames.includes(d.name));
-  if (trailersToAdd.length) {
-    localStorage.setItem(trailerKey, JSON.stringify([...existingTrailers, ...trailersToAdd]));
-  }
-
   const defaultItems = [
     {
       name: 'Atlas Copco PAC H108 E (PAC 108E)',
@@ -816,12 +809,21 @@ function seedDefaultEquipment() {
       notes: '150 HP electric pump. Max flow 3,950 USgpm, max head 200 ft. 8" suction / 8" discharge. Dry weight ~4,520 lbs. Dimensions approx. 7.8 ft L × 5.7 ft W × 4.4 ft H.'
     }
   ];
-  const existing = JSON.parse(localStorage.getItem(itemKey) || '[]');
-  const existingNames = existing.map(i => i.name);
-  const toAdd = defaultItems.filter(d => !existingNames.includes(d.name));
-  if (toAdd.length) {
-    localStorage.setItem(itemKey, JSON.stringify([...existing, ...toAdd]));
-  }
+
+  // Always ensure built-ins exist
+  let existingTrailers = JSON.parse(localStorage.getItem(trailerKey) || '[]');
+  let existingTrailerNames = existingTrailers.map(t => t.name);
+  defaultTrailers.forEach(d => {
+    if (!existingTrailerNames.includes(d.name)) existingTrailers.push(d);
+  });
+  localStorage.setItem(trailerKey, JSON.stringify(existingTrailers));
+
+  let existingItems = JSON.parse(localStorage.getItem(itemKey) || '[]');
+  let existingItemNames = existingItems.map(i => i.name);
+  defaultItems.forEach(d => {
+    if (!existingItemNames.includes(d.name)) existingItems.push(d);
+  });
+  localStorage.setItem(itemKey, JSON.stringify(existingItems));
 }
 
 function renderEquipmentLibrary() {
