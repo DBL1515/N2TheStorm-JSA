@@ -283,8 +283,15 @@
           </div>
           <button type="button" id="saveTrailerSpecBtn" class="btn small secondary" style="margin-bottom:0.75rem;">Save These Trailer Specs</button>
           <h4 style="margin:1rem 0 0.5rem;">Load Items</h4>
+          <div class="field">
+            <label>Add from Saved Load Items</label>
+            <select id="savedLoadItemSelect">
+              <option value="">— Select a saved load item —</option>
+            </select>
+            <button type="button" id="addSavedLoadItemBtn" class="btn small" style="margin-top:0.4rem;">Add Selected Item</button>
+          </div>
           <div id="trailerItemsContainer"></div>
-          <button type="button" id="addTrailerItemBtn" class="btn small">+ Add Item</button>
+          <button type="button" id="addTrailerItemBtn" class="btn small">+ Add Custom Item</button>
           <div id="trailerSummary" class="summary-box" style="margin-top:1rem;"></div>
         </div>
 
@@ -293,7 +300,18 @@
       <div id="journeyList"></div>
     </section>
 
-    <!-- Feedback View -->
+    <!-- Equipment Library View -->
+    <section id="equipmentView" class="view hidden">
+      <h2>Saved Equipment</h2>
+      <div class="form-section">
+        <h3>Saved Trailers</h3>
+        <div id="trailerLibrary"></div>
+      </div>
+      <div class="form-section">
+        <h3>Saved Load Items</h3>
+        <div id="loadItemLibrary"></div>
+      </div>
+    </section>
     <section id="feedbackView" class="view hidden">
       <h2>App Feedback</h2>
       <p class="small-note">Help us improve the N2TheStorm JSA app. Your feedback is sent to Dave@n2thestorm.com.</p>
@@ -337,7 +355,13 @@
     </section>
   </main>
 
-  <footer>
+  <div id="equipmentModal" class="modal hidden">
+    <div class="modal-content">
+      <button id="closeModalBtn" class="modal-close">✕</button>
+      <h3 id="modalTitle"></h3>
+      <div id="modalBody"></div>
+    </div>
+  </div>
     <p>N2TheStorm JSA App • For internal use</p>
   </footer>
 
