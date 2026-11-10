@@ -101,7 +101,7 @@ function setupEventListeners() {
   document.getElementById('saveJourneyBtn').onclick = saveJourney;
   document.getElementById('addTrailerItemBtn').onclick = addTrailerItem;
   document.getElementById('addSavedLoadItemBtn').onclick = addSavedLoadItem;
-  document.getElementById('saveTrailerSpecBtn').onclick = saveTrailerSpec;
+  document.getElementById('manageTrailersBtn').onclick = showManageTrailers;
   document.getElementById('savedTrailerSelect').onchange = loadSavedTrailer;
   document.getElementById('departGpsBtn').onclick = () => fillGps('journeyDepart');
   document.getElementById('destGpsBtn').onclick = () => fillGps('journeyDest');
@@ -683,7 +683,14 @@ function fillGps(fieldId) {
 function openMaps(fieldId) {
   const val = document.getElementById(fieldId).value.trim();
   const q = val || 'current location';
-  window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`, '_blank');
+  const url = `https://maps.google.com/?q=${encodeURIComponent(q)}`;
+  const a = document.createElement('a');
+  a.href = url;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 }
 
 function tryAutoRoute() {
@@ -692,17 +699,27 @@ function tryAutoRoute() {
   if (!from || !to) return;
   const routeBox = document.getElementById('journeyRoute');
   routeBox.value = 'Loading route...';
-  // Use free OSRM for a quick summary (works with coords or will fall back)
+
   const fromCoord = parseCoord(from);
   const toCoord = parseCoord(to);
+
   if (fromCoord && toCoord) {
-    fetch(`https://router.project-osrm.org/route/v1/driving/${fromCoord.lon},${fromCoord.lat};${toCoord.lon},${toCoord.lat}?overview=false`)
+    // Use OSRM for step-by-step directions
+    fetch(`https://router.project-osrm.org/route/v1/driving/${fromCoord.lon},${fromCoord.lat};${toCoord.lon},${toCoord.lat}?overview=false&steps=true`)
       .then(r => r.json())
       .then(data => {
-        if (data.routes && data.routes[0]) {
-          const dist = (data.routes[0].distance / 1609.34).toFixed(1);
-          const mins = Math.round(data.routes[0].duration / 60);
-          routeBox.value = `Approx. ${dist} miles, ${mins} minutes driving. Open Google Maps for turn-by-turn.`;
+        if (data.routes && data.routes[0] && data.routes[0].legs) {
+          const steps = data.routes[0].legs[0].steps || [];
+          const lines = steps.map((s, i) => {
+            const dist = (s.distance / 1609.34).toFixed(1);
+            const instruction = s.maneuver && s.maneuver.instruction ? s.maneuver.instruction : (s.name ? `Continue on ${s.name}` : 'Continue');
+            return `${i + 1}. ${instruction} (${dist} mi)`;
+          }).filter(Boolean);
+          const totalDist = (data.routes[0].distance / 1609.34).toFixed(1);
+          const totalMins = Math.round(data.routes[0].duration / 60);
+          routeBox.value = lines.length
+            ? `Total: ${totalDist} miles, ~${totalMins} min\n\n` + lines.join('\n')
+            : `Approx. ${totalDist} miles, ${totalMins} minutes. Use Google Maps for full turn-by-turn.`;
         } else {
           routeBox.value = 'Route calculated. Use Get Google Maps Directions for full details.';
         }
@@ -824,48 +841,59 @@ function renderEquipmentLibrary() {
     'Atlas Copco PAC F88 E (PAC 88E)'
   ];
 
-  document.getElementById('trailerLibrary').innerHTML = trailers.length
-    ? trailers.map((t, i) => {
-        const isBuiltIn = builtInTrailers.includes(t.name);
-        return `
-          <div class="jsa-card" onclick="showEquipmentDetail('trailer', ${i})">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-              <div>
-                <strong>${escapeHtml(t.name)}</strong><br>
-                <span class="meta">Max ${t.maxWeight || '—'} lbs • ${t.maxLength || '—'} ft long</span>
-              </div>
-              ${isBuiltIn ? '<span class="meta" style="color:#64748b;">Built-in</span>' : `<button type="button" class="btn small secondary" onclick="event.stopPropagation(); deleteTrailer(${i})">Delete</button>`}
-            </div>
-          </div>
-        `;
-      }).join('')
-    : '<p>No saved trailers yet.</p>';
+  const builtInTrailerList = trailers.filter(t => builtInTrailers.includes(t.name));
+  const builtInItemList = items.filter(it => builtInItems.includes(it.name));
 
-  document.getElementById('loadItemLibrary').innerHTML = items.length
-    ? items.map((it, i) => {
-        const isBuiltIn = builtInItems.includes(it.name);
+  document.getElementById('trailerLibrary').innerHTML = builtInTrailerList.length
+    ? builtInTrailerList.map((t) => {
+        const realIndex = trailers.findIndex(x => x.name === t.name);
         return `
-          <div class="jsa-card" onclick="showEquipmentDetail('item', ${i})">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-              <div>
-                <strong>${escapeHtml(it.name)}</strong><br>
-                <span class="meta">${it.weight || '—'} lbs</span>
-              </div>
-              ${isBuiltIn ? '<span class="meta" style="color:#64748b;">Built-in</span>' : `<button type="button" class="btn small secondary" onclick="event.stopPropagation(); deleteLoadItem(${i})">Delete</button>`}
-            </div>
+          <div class="jsa-card" onclick="showEquipmentDetail('trailer', ${realIndex})">
+            <strong>${escapeHtml(t.name)}</strong><br>
+            <span class="meta">Max ${t.maxWeight || '—'} lbs • ${t.maxLength || '—'} ft long</span>
           </div>
         `;
       }).join('')
-    : '<p>No saved load items yet.</p>';
+    : '<p>No built-in trailers loaded.</p>';
+
+  document.getElementById('loadItemLibrary').innerHTML = builtInItemList.length
+    ? builtInItemList.map((it) => {
+        const realIndex = items.findIndex(x => x.name === it.name);
+        return `
+          <div class="jsa-card" onclick="showEquipmentDetail('item', ${realIndex})">
+            <strong>${escapeHtml(it.name)}</strong><br>
+            <span class="meta">${it.weight || '—'} lbs</span>
+          </div>
+        `;
+      }).join('')
+    : '<p>No built-in load items loaded.</p>';
 }
 
-function deleteTrailer(index) {
-  if (!confirm('Delete this trailer? This cannot be undone.')) return;
+function showManageTrailers() {
   const all = JSON.parse(localStorage.getItem('n2thestorm_trailer_specs') || '[]');
-  all.splice(index, 1);
-  localStorage.setItem('n2thestorm_trailer_specs', JSON.stringify(all));
-  renderEquipmentLibrary();
-  renderSavedTrailers();
+  const builtIn = [
+    "35' Gooseneck (Dual Axle)",
+    'Mesa Energy Solutions 350kW NG Generator (22L)',
+    'Mesa Energy Solutions 250kW NG Generator (14L)',
+    'Mesa Energy Solutions 170kW NG Generator (11L)'
+  ];
+  const userTrailers = all.filter(t => !builtIn.includes(t.name));
+  if (!userTrailers.length) {
+    alert('You have no custom trailers saved yet.');
+    return;
+  }
+  const names = userTrailers.map(t => t.name).join('\n');
+  const toDelete = prompt('Your saved trailers:\n\n' + names + '\n\nType the exact name of the trailer you want to delete:');
+  if (!toDelete) return;
+  const idx = all.findIndex(t => t.name === toDelete.trim());
+  if (idx >= 0 && !builtIn.includes(all[idx].name)) {
+    all.splice(idx, 1);
+    localStorage.setItem('n2thestorm_trailer_specs', JSON.stringify(all));
+    renderSavedTrailers();
+    alert('Trailer deleted.');
+  } else {
+    alert('Trailer not found or it is a built-in trailer.');
+  }
 }
 
 function deleteLoadItem(index) {
@@ -917,8 +945,14 @@ function openDirections() {
   const from = document.getElementById('journeyDepart').value.trim();
   const to = document.getElementById('journeyDest').value.trim();
   if (!from || !to) { alert('Enter both departure and destination first.'); return; }
-  const url = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(from)}&destination=${encodeURIComponent(to)}`;
-  window.open(url, '_blank');
+  const url = `https://maps.google.com/maps/dir/?api=1&origin=${encodeURIComponent(from)}&destination=${encodeURIComponent(to)}`;
+  const a = document.createElement('a');
+  a.href = url;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
   document.getElementById('journeyRoute').value = `Directions opened in Google Maps from "${from}" to "${to}".`;
 }
 
