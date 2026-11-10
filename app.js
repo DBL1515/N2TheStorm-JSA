@@ -282,23 +282,58 @@ async function loadNearbyHospitals(lat, lon) {
   const select = document.getElementById('nearestHospital');
   select.innerHTML = '<option value="">Loading hospitals...</option>';
   try {
-    // Overpass API query for hospitals within ~15km
-    const query = `[out:json];node["amenity"="hospital"](around:15000,${lat},${lon});out;`;
+    // Query nodes, ways, and relations for better coverage
+    const query = `
+      [out:json][timeout:25];
+      (
+        node["amenity"="hospital"](around:80467,${lat},${lon});
+        way["amenity"="hospital"](around:80467,${lat},${lon});
+        relation["amenity"="hospital"](around:80467,${lat},${lon});
+      );
+      out center;
+    `;
     const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
     const res = await fetch(url);
+    if (!res.ok) throw new Error('Overpass error');
     const data = await res.json();
-    const hospitals = (data.elements || [])
-      .filter(e => e.tags && e.tags.name)
-      .slice(0, 15)
-      .map(e => e.tags.name);
 
-    select.innerHTML = '<option value="">Select nearest hospital...</option>' +
-      hospitals.map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('');
+    const hospitals = (data.elements || [])
+      .map(e => e.tags && e.tags.name)
+      .filter(Boolean)
+      .filter((name, i, arr) => arr.indexOf(name) === i) // unique
+      .slice(0, 25)
+      .sort();
+
+    let options = '<option value="">Select nearest hospital...</option>';
+    options += hospitals.map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('');
+    options += '<option value="__manual__">— Enter hospital manually —</option>';
+    select.innerHTML = options;
+
     if (!hospitals.length) {
-      select.innerHTML = '<option value="">No hospitals found nearby — enter manually later</option>';
+      select.innerHTML = '<option value="">No hospitals found — use manual entry</option><option value="__manual__">— Enter hospital manually —</option>';
     }
+
+    // Handle manual entry
+    select.onchange = () => {
+      const manualInput = document.getElementById('manualHospital');
+      if (select.value === '__manual__') {
+        if (!manualInput) {
+          const input = document.createElement('input');
+          input.type = 'text';
+          input.id = 'manualHospital';
+          input.placeholder = 'Type hospital name';
+          input.className = 'field';
+          input.style.marginTop = '0.5rem';
+          select.parentNode.appendChild(input);
+        } else {
+          manualInput.style.display = 'block';
+        }
+      } else if (manualInput) {
+        manualInput.style.display = 'none';
+      }
+    };
   } catch (e) {
-    select.innerHTML = '<option value="">Could not load hospitals (check connection)</option>';
+    select.innerHTML = '<option value="">Could not load hospitals</option><option value="__manual__">— Enter hospital manually —</option>';
   }
 }
 
@@ -317,7 +352,14 @@ function getFormData() {
     supervisor: document.getElementById('supervisor').value.trim(),
     latitude: document.getElementById('latitude').value,
     longitude: document.getElementById('longitude').value,
-    nearestHospital: document.getElementById('nearestHospital').value,
+    nearestHospital: (() => {
+      const sel = document.getElementById('nearestHospital').value;
+      if (sel === '__manual__') {
+        const manual = document.getElementById('manualHospital');
+        return manual ? manual.value.trim() : '';
+      }
+      return sel;
+    })(),
     participants: [...participants],
     ppe: ppeChecked,
     hazards: selectedHazards.map(h => ({ id: h.id, name: h.name, residualRisk: h.residualRisk })),
