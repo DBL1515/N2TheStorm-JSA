@@ -39,10 +39,11 @@ const formView = document.getElementById('formView');
 const previewView = document.getElementById('previewView');
 const lotoView = document.getElementById('lotoView');
 const journeyView = document.getElementById('journeyView');
-const trailerView = document.getElementById('trailerView');
 const feedbackView = document.getElementById('feedbackView');
 const jsaList = document.getElementById('jsaList');
 const form = document.getElementById('jsaForm');
+
+let signaturePad = null;
 
 document.addEventListener('DOMContentLoaded', () => {
   setDefaultDates();
@@ -51,8 +52,10 @@ document.addEventListener('DOMContentLoaded', () => {
   renderLotoList();
   renderJourneyList();
   setupEventListeners();
+  initSignaturePad();
   registerServiceWorker();
-  addParticipant(); // start with one
+  addParticipant();
+  requestLocation(); // auto-request on load
 });
 
 function setDefaultDates() {
@@ -86,12 +89,10 @@ function setupEventListeners() {
   };
 
   document.getElementById('addParticipantBtn').onclick = () => addParticipant();
-  document.getElementById('getLocationBtn').onclick = getLocation;
-  document.getElementById('findHospitalBtn').onclick = findHospital;
   document.getElementById('saveLotoBtn').onclick = saveLoto;
   document.getElementById('saveJourneyBtn').onclick = saveJourney;
   document.getElementById('addTrailerItemBtn').onclick = addTrailerItem;
-  document.getElementById('saveTrailerBtn').onclick = saveTrailer;
+  document.getElementById('clearSignatureBtn').onclick = clearSignature;
 
   // Nav
   document.querySelectorAll('.nav-btn').forEach(btn => {
@@ -104,13 +105,12 @@ function setupEventListeners() {
 }
 
 function showView(view) {
-  [listView, formView, previewView, lotoView, journeyView, trailerView, feedbackView].forEach(v => v && v.classList.add('hidden'));
+  [listView, formView, previewView, lotoView, journeyView, feedbackView].forEach(v => v && v.classList.add('hidden'));
   if (view === 'list') listView.classList.remove('hidden');
   if (view === 'form') formView.classList.remove('hidden');
   if (view === 'preview') previewView.classList.remove('hidden');
   if (view === 'loto') lotoView.classList.remove('hidden');
   if (view === 'journey') journeyView.classList.remove('hidden');
-  if (view === 'trailer') trailerView.classList.remove('hidden');
   if (view === 'feedback') feedbackView.classList.remove('hidden');
   window.scrollTo(0, 0);
 }
@@ -206,35 +206,100 @@ function removeParticipant(id) {
   updateParticipants();
 }
 
-function getLocation() {
+function initSignaturePad() {
+  const canvas = document.getElementById('signatureCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  let drawing = false;
+
+  function getPos(e) {
+    const rect = canvas.getBoundingClientRect();
+    const touch = e.touches ? e.touches[0] : e;
+    return {
+      x: (touch.clientX - rect.left) * (canvas.width / rect.width),
+      y: (touch.clientY - rect.top) * (canvas.height / rect.height)
+    };
+  }
+
+  function start(e) { drawing = true; const p = getPos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); e.preventDefault(); }
+  function move(e) {
+    if (!drawing) return;
+    const p = getPos(e);
+    ctx.lineTo(p.x, p.y);
+    ctx.strokeStyle = '#1e293b';
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+    e.preventDefault();
+  }
+  function end() { drawing = false; }
+
+  canvas.addEventListener('mousedown', start);
+  canvas.addEventListener('mousemove', move);
+  canvas.addEventListener('mouseup', end);
+  canvas.addEventListener('mouseleave', end);
+  canvas.addEventListener('touchstart', start, { passive: false });
+  canvas.addEventListener('touchmove', move, { passive: false });
+  canvas.addEventListener('touchend', end);
+  signaturePad = { canvas, ctx };
+}
+
+function clearSignature() {
+  if (!signaturePad) return;
+  signaturePad.ctx.clearRect(0, 0, signaturePad.canvas.width, signaturePad.canvas.height);
+}
+
+function getSignatureData() {
+  if (!signaturePad) return '';
+  return signaturePad.canvas.toDataURL('image/png');
+}
+
+function requestLocation() {
   const status = document.getElementById('locationStatus');
-  status.textContent = 'Getting location...';
   if (!navigator.geolocation) {
-    status.textContent = 'Geolocation not supported by this browser.';
+    status.textContent = 'Geolocation is not supported by this device.';
     return;
   }
+  status.textContent = 'Requesting location...';
   navigator.geolocation.getCurrentPosition(
     pos => {
-      document.getElementById('latitude').value = pos.coords.latitude.toFixed(6);
-      document.getElementById('longitude').value = pos.coords.longitude.toFixed(6);
+      const lat = pos.coords.latitude.toFixed(6);
+      const lon = pos.coords.longitude.toFixed(6);
+      document.getElementById('latitude').value = lat;
+      document.getElementById('longitude').value = lon;
       status.textContent = 'Location captured.';
+      loadNearbyHospitals(lat, lon);
     },
-    err => { status.textContent = 'Location error: ' + err.message; },
-    { enableHighAccuracy: true, timeout: 10000 }
+    err => {
+      status.textContent = 'Location is required. Please allow location access and reload the page.';
+      alert('Location access is required to complete a JSA. Please enable location services and refresh.');
+    },
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
   );
 }
 
-function findHospital() {
-  const lat = document.getElementById('latitude').value;
-  const lon = document.getElementById('longitude').value;
-  if (!lat || !lon) {
-    alert('Get location first.');
-    return;
+async function loadNearbyHospitals(lat, lon) {
+  const select = document.getElementById('nearestHospital');
+  select.innerHTML = '<option value="">Loading hospitals...</option>';
+  try {
+    // Overpass API query for hospitals within ~15km
+    const query = `[out:json];node["amenity"="hospital"](around:15000,${lat},${lon});out;`;
+    const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    const hospitals = (data.elements || [])
+      .filter(e => e.tags && e.tags.name)
+      .slice(0, 15)
+      .map(e => e.tags.name);
+
+    select.innerHTML = '<option value="">Select nearest hospital...</option>' +
+      hospitals.map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('');
+    if (!hospitals.length) {
+      select.innerHTML = '<option value="">No hospitals found nearby — enter manually later</option>';
+    }
+  } catch (e) {
+    select.innerHTML = '<option value="">Could not load hospitals (check connection)</option>';
   }
-  // Open Google Maps search for nearest hospital
-  const url = `https://www.google.com/maps/search/hospital/@${lat},${lon},15z`;
-  window.open(url, '_blank');
-  document.getElementById('nearestHospital').placeholder = 'Search opened in Maps — enter hospital name here';
 }
 
 function getFormData() {
@@ -252,12 +317,12 @@ function getFormData() {
     supervisor: document.getElementById('supervisor').value.trim(),
     latitude: document.getElementById('latitude').value,
     longitude: document.getElementById('longitude').value,
-    nearestHospital: document.getElementById('nearestHospital').value.trim(),
+    nearestHospital: document.getElementById('nearestHospital').value,
     participants: [...participants],
     ppe: ppeChecked,
     hazards: selectedHazards.map(h => ({ id: h.id, name: h.name, residualRisk: h.residualRisk })),
     notes: document.getElementById('notes').value.trim(),
-    workerSign: document.getElementById('workerSign').value.trim(),
+    signature: getSignatureData(),
     signDate: document.getElementById('signDate').value,
     createdAt: new Date().toISOString(),
     status: 'draft'
@@ -339,7 +404,8 @@ function renderReport(data) {
     <h3>Notes</h3>
     <p>${escapeHtml(data.notes)||'—'}</p>
     <div class="signature-block">
-      <p><strong>Worker Signature:</strong> ${escapeHtml(data.workerSign)||'—'}</p>
+      <p><strong>Worker Signature:</strong></p>
+      ${data.signature ? `<img src="${data.signature}" alt="Signature" style="max-width:250px; border:1px solid #e2e8f0; border-radius:6px;">` : '<em>No signature</em>'}
       <p><strong>Date Signed:</strong> ${data.signDate||'—'}</p>
     </div>
   `;
@@ -376,8 +442,12 @@ function loadJsa(id) {
   document.getElementById('longitude').value = j.longitude || '';
   document.getElementById('nearestHospital').value = j.nearestHospital || '';
   document.getElementById('notes').value = j.notes || '';
-  document.getElementById('workerSign').value = j.workerSign || '';
   document.getElementById('signDate').value = j.signDate || '';
+  if (j.signature && signaturePad) {
+    const img = new Image();
+    img.onload = () => signaturePad.ctx.drawImage(img, 0, 0);
+    img.src = j.signature;
+  }
 
   // Participants
   document.getElementById('participantsContainer').innerHTML = '';

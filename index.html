@@ -33,7 +33,6 @@
     <button data-view="form" class="nav-btn">JSA Form</button>
     <button data-view="loto" class="nav-btn">LOTO</button>
     <button data-view="journey" class="nav-btn">Journey</button>
-    <button data-view="trailer" class="nav-btn">Trailer</button>
     <button data-view="feedback" class="nav-btn">Feedback</button>
   </nav>
 
@@ -80,13 +79,14 @@
               <input type="text" id="latitude" placeholder="Latitude" readonly>
               <input type="text" id="longitude" placeholder="Longitude" readonly>
             </div>
-            <button type="button" id="getLocationBtn" class="btn small secondary" style="margin-top:0.5rem;">Get Current Location</button>
-            <p id="locationStatus" class="small-note"></p>
+            <p id="locationStatus" class="small-note">Requesting location...</p>
           </div>
           <div class="field">
             <label>Nearest Hospital</label>
-            <input type="text" id="nearestHospital" placeholder="Hospital name (auto-suggest or enter manually)">
-            <button type="button" id="findHospitalBtn" class="btn small secondary" style="margin-top:0.5rem;">Find Nearest Hospital</button>
+            <select id="nearestHospital">
+              <option value="">Select nearest hospital...</option>
+            </select>
+            <p class="small-note">Hospitals are loaded based on your current location.</p>
           </div>
         </div>
 
@@ -131,8 +131,11 @@
         <div class="form-section">
           <h3>Acknowledgment</h3>
           <div class="field">
-            <label>Worker Signature (type name)</label>
-            <input type="text" id="workerSign" placeholder="Type your full name as signature">
+            <label>Worker Signature (sign with finger)</label>
+            <div class="signature-box">
+              <canvas id="signatureCanvas" width="350" height="150"></canvas>
+              <button type="button" id="clearSignatureBtn" class="btn small secondary">Clear Signature</button>
+            </div>
           </div>
           <div class="field">
             <label>Date Signed</label>
@@ -228,32 +231,26 @@
           <div class="field"><label>Primary Comms</label><input type="text" id="journeyComms"></div>
           <div class="field"><label>Emergency Contacts</label><textarea id="journeyEmergency" rows="2"></textarea></div>
         </div>
+
+        <div class="form-section">
+          <h3>Trailer Load Planning</h3>
+          <div class="field-row">
+            <div class="field"><label>Max Weight Capacity (lbs)</label><input type="number" id="trailerMaxWeight" placeholder="e.g. 10000"></div>
+            <div class="field"><label>Max Length (ft)</label><input type="number" id="trailerMaxLength" step="0.1"></div>
+          </div>
+          <div class="field-row">
+            <div class="field"><label>Max Width (ft)</label><input type="number" id="trailerMaxWidth" step="0.1"></div>
+            <div class="field"><label>Max Height (ft)</label><input type="number" id="trailerMaxHeight" step="0.1"></div>
+          </div>
+          <h4 style="margin:1rem 0 0.5rem;">Load Items</h4>
+          <div id="trailerItemsContainer"></div>
+          <button type="button" id="addTrailerItemBtn" class="btn small">+ Add Item</button>
+          <div id="trailerSummary" class="summary-box" style="margin-top:1rem;"></div>
+        </div>
+
         <button type="button" id="saveJourneyBtn" class="btn primary">Save Journey Plan</button>
       </form>
       <div id="journeyList"></div>
-    </section>
-
-    <!-- Trailer Load View -->
-    <section id="trailerView" class="view hidden">
-      <h2>Trailer Load Planning</h2>
-      <div class="form-section">
-        <h3>Trailer Specifications</h3>
-        <div class="field-row">
-          <div class="field"><label>Max Weight Capacity (lbs)</label><input type="number" id="trailerMaxWeight" placeholder="e.g. 10000"></div>
-          <div class="field"><label>Max Length (ft)</label><input type="number" id="trailerMaxLength" step="0.1"></div>
-        </div>
-        <div class="field-row">
-          <div class="field"><label>Max Width (ft)</label><input type="number" id="trailerMaxWidth" step="0.1"></div>
-          <div class="field"><label>Max Height (ft)</label><input type="number" id="trailerMaxHeight" step="0.1"></div>
-        </div>
-      </div>
-      <div class="form-section">
-        <h3>Load Items</h3>
-        <div id="trailerItemsContainer"></div>
-        <button type="button" id="addTrailerItemBtn" class="btn small">+ Add Item</button>
-        <div id="trailerSummary" class="summary-box" style="margin-top:1rem;"></div>
-      </div>
-      <button type="button" id="saveTrailerBtn" class="btn primary">Save Load Plan</button>
     </section>
 
     <!-- Feedback View -->
