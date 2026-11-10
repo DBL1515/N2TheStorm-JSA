@@ -47,6 +47,7 @@ let signaturePad = null;
 
 document.addEventListener('DOMContentLoaded', () => {
   setDefaultDates();
+  seedDefaultEquipment();
   renderHazardCheckboxes();
   renderList();
   renderLotoList();
@@ -1144,7 +1145,6 @@ function removeTrailerItem(id) {
 }
 
 function updateTrailerSummary() {
-  // Collect current values
   document.querySelectorAll('.trailer-item').forEach(row => {
     const id = row.dataset.id;
     const item = trailerItems.find(i => i.id == id);
@@ -1159,10 +1159,18 @@ function updateTrailerSummary() {
   const totalWeight = trailerItems.reduce((s, i) => s + i.weight, 0);
   const maxW = parseFloat(document.getElementById('trailerMaxWeight').value) || 0;
   const over = maxW > 0 && totalWeight > maxW;
-  document.getElementById('trailerSummary').innerHTML = `
-    <strong>Total Weight:</strong> ${totalWeight} lbs ${maxW ? `/ Max ${maxW} lbs` : ''}<br>
-    ${over ? '<span style="color:#dc2626;font-weight:700;">⚠ OVERLOADED — exceeds trailer capacity</span>' : '<span style="color:#16a34a;">Within capacity</span>'}
-  `;
+  const remaining = maxW > 0 ? maxW - totalWeight : null;
+
+  let html = `<strong>Total Load Weight:</strong> ${totalWeight.toLocaleString()} lbs`;
+  if (maxW > 0) {
+    html += `<br><strong>Payload Capacity:</strong> ${maxW.toLocaleString()} lbs`;
+    if (over) {
+      html += `<br><span style="color:#dc2626; font-weight:700;">⚠ OVERLOADED by ${(totalWeight - maxW).toLocaleString()} lbs</span>`;
+    } else {
+      html += `<br><span style="color:#16a34a;">✓ Within capacity (${remaining.toLocaleString()} lbs remaining)</span>`;
+    }
+  }
+  document.getElementById('trailerSummary').innerHTML = html;
 }
 
 function saveTrailer() {
