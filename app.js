@@ -4,7 +4,11 @@
 const STORAGE_KEY = 'n2thestorm_jsas';
 const LOTO_KEY = 'n2thestorm_loto';
 const JOURNEY_KEY = 'n2thestorm_journey';
-const TRAILER_KEY = 'n2thestorm_trailer';
+const MAINT_KEY = 'n2thestorm_maintenance';
+let maintParts = [];
+let maintPhotos = []; // array of data URLs
+let maintTechSigPad = null;
+let maintCustSigPad = null;
 
 // Hazard library with default risk and controls
 const HAZARDS = [
@@ -40,6 +44,7 @@ const previewView = document.getElementById('previewView');
 const lotoView = document.getElementById('lotoView');
 const journeyView = document.getElementById('journeyView');
 const feedbackView = document.getElementById('feedbackView');
+const maintenanceView = document.getElementById('maintenanceView');
 const jsaList = document.getElementById('jsaList');
 const form = document.getElementById('jsaForm');
 
@@ -116,7 +121,28 @@ function setupEventListeners() {
     document.getElementById(id).addEventListener('change', tryAutoRoute);
   });
 
-  document.getElementById('closeModalBtn').onclick = closeEquipmentModal;
+  document.getElementById('saveMaintBtn').onclick = saveMaintenance;
+  document.getElementById('newMaintBtn').onclick = clearMaintenanceForm;
+  document.getElementById('maintGpsBtn').onclick = () => fillGps('maintGps');
+  document.getElementById('maintChargeBack').onchange = () => {
+    document.getElementById('maintChargeBackFields').classList.toggle('hidden', !document.getElementById('maintChargeBack').checked);
+  };
+  document.getElementById('addPartBtn').onclick = addMaintPart;
+  document.getElementById('addPhotoBtn').onclick = () => document.getElementById('maintPhotoInput').click();
+  document.getElementById('maintPhotoInput').onchange = handleMaintPhotos;
+  document.getElementById('clearTechSigBtn').onclick = () => clearCanvas('maintTechSig');
+  document.getElementById('clearCustSigBtn').onclick = () => clearCanvas('maintCustSig');
+  document.getElementById('maintFollowUp').onchange = () => {
+    document.getElementById('maintFollowUpFields').classList.toggle('hidden', !document.getElementById('maintFollowUp').checked);
+  };
+  document.getElementById('maintNextHours').addEventListener('input', checkNextService);
+  document.getElementById('emailUpcomingBtn').onclick = emailUpcomingServices;
+  checkUpcomingServices();
+  document.querySelectorAll('input[name="maintOperable"]').forEach(r => {
+    r.onchange = () => {
+      document.getElementById('maintNotOperableFields').classList.toggle('hidden', r.value !== 'no' || !r.checked);
+    };
+  });
   document.getElementById('equipmentModal').onclick = (e) => {
     if (e.target.id === 'equipmentModal') closeEquipmentModal();
   };
@@ -135,7 +161,7 @@ function setupEventListeners() {
 }
 
 function showView(view) {
-  [listView, formView, previewView, lotoView, journeyView, feedbackView, equipmentView].forEach(v => v && v.classList.add('hidden'));
+  [listView, formView, previewView, lotoView, journeyView, feedbackView, equipmentView, maintenanceView].forEach(v => v && v.classList.add('hidden'));
   if (view === 'list') listView.classList.remove('hidden');
   if (view === 'form') formView.classList.remove('hidden');
   if (view === 'preview') previewView.classList.remove('hidden');
@@ -143,6 +169,7 @@ function showView(view) {
   if (view === 'journey') journeyView.classList.remove('hidden');
   if (view === 'feedback') feedbackView.classList.remove('hidden');
   if (view === 'equipment') { equipmentView.classList.remove('hidden'); renderEquipmentLibrary(); }
+  if (view === 'maintenance') { maintenanceView.classList.remove('hidden'); renderMaintList(); checkUpcomingServices(); }
   window.scrollTo(0, 0);
 }
 
@@ -1226,6 +1253,346 @@ function sendFeedback() {
     all.unshift({ name, type, message, date: new Date().toISOString() });
     localStorage.setItem('n2thestorm_feedback', JSON.stringify(all.slice(0, 50)));
   } catch (e) {}
+}
+
+function updateMaintHistory() {
+  const unit = document.getElementById('maintUnit').value.trim().toLowerCase();
+  const serial = document.getElementById('maintSerial').value.trim().toLowerCase();
+  const container = document.getElementById('maintHistoryList');
+  if (!container) return;
+  if (!unit && !serial) {
+    container.innerHTML = '<p class="small-note">Enter a Unit # or Serial # to see history.</p>';
+    return;
+  }
+  const all = JSON.parse(localStorage.getItem(MAINT_KEY) || '[]');
+  const matches = all.filter(r => {
+    const rUnit = (r.unit || '').toLowerCase();
+    const rSerial = (r.serial || '').toLowerCase();
+    return (unit && rUnit.includes(unit)) || (serial && rSerial.includes(serial));
+  });
+  if (!matches.length) {
+    container.innerHTML = '<p class="small-note">No previous records found for this unit.</p>';
+    return;
+  }
+  container.innerHTML = matches.map(r => `
+    <div class="jsa-card" onclick="loadMaintenance('${r.id}')">
+      <strong>${new Date(r.savedAt).toLocaleDateString()} — ${escapeHtml(r.tech || 'Unknown')}</strong><br>
+      <span class="meta">${r.fullService ? 'Full Service' : ''} ${r.repair ? 'Repair' : ''} ${r.chargeBack ? 'Charge Back' : ''} • Hours: ${r.hours || '—'}</span><br>
+      <small>${escapeHtml((r.notes || '').substring(0, 80))}${r.notes && r.notes.length > 80 ? '…' : ''}</small>
+    </div>
+  `).join('');
+}
+
+function sendChargeBackEmail() {
+  const company = document.getElementById('maintCustomer').value.trim() || 'Unknown Company';
+  const unit = document.getElementById('maintUnit').value.trim() || 'Unknown Unit';
+  const details = document.getElementById('maintChargeBackDetails').value.trim();
+  const tech = document.getElementById('maintTech').value.trim();
+  const site = document.getElementById('maintSite').value.trim();
+  const subject = `Charge Back ${company}`;
+  const body = `Charge Back Request\n\nCompany: ${company}\nUnit #: ${unit}\nSite: ${site}\nTechnician: ${tech}\n\nParts & Hours to Charge Back:\n${details || '(none entered)'}\n\n---\nSent from N2TheStorm Maintenance Tracker`;
+  const mailto = `mailto:Dave@n2thestorm.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  window.location.href = mailto;
+}
+
+function addMaintPart() {
+  const id = Date.now();
+  maintParts.push({ id, name: '', partNum: '', qty: 1 });
+  renderMaintParts();
+}
+
+function renderMaintParts() {
+  const c = document.getElementById('partsContainer');
+  if (!c) return;
+  c.innerHTML = maintParts.map(p => `
+    <div class="field-row" data-id="${p.id}" style="align-items:center; margin-bottom:0.4rem;">
+      <input type="text" placeholder="Part name" value="${escapeHtml(p.name)}" data-field="name" style="flex:2;">
+      <input type="text" placeholder="Part #" value="${escapeHtml(p.partNum)}" data-field="partNum" style="flex:1.5;">
+      <input type="number" placeholder="Qty" value="${p.qty}" data-field="qty" min="1" style="width:70px;">
+      <button type="button" class="btn small secondary" onclick="removeMaintPart('${p.id}')">✕</button>
+    </div>
+  `).join('');
+  c.querySelectorAll('input').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const row = inp.closest('[data-id]');
+      const part = maintParts.find(x => x.id == row.dataset.id);
+      if (part) part[inp.dataset.field] = inp.value;
+    });
+  });
+}
+
+function removeMaintPart(id) {
+  maintParts = maintParts.filter(p => p.id != id);
+  renderMaintParts();
+}
+
+function handleMaintPhotos(e) {
+  const files = Array.from(e.target.files || []);
+  const remaining = 8 - maintPhotos.length;
+  files.slice(0, remaining).forEach(file => {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      maintPhotos.push(ev.target.result);
+      renderMaintPhotos();
+    };
+    reader.readAsDataURL(file);
+  });
+  e.target.value = '';
+}
+
+function renderMaintPhotos() {
+  const c = document.getElementById('maintPhotosPreview');
+  const note = document.getElementById('photoCountNote');
+  if (!c) return;
+  c.innerHTML = maintPhotos.map((src, i) => `
+    <div style="position:relative; display:inline-block;">
+      <img src="${src}" alt="Photo ${i+1}">
+      <button type="button" onclick="removeMaintPhoto(${i})" style="position:absolute; top:-6px; right:-6px; background:#dc2626; color:white; border:none; border-radius:50%; width:18px; height:18px; font-size:12px; cursor:pointer;">✕</button>
+    </div>
+  `).join('');
+  if (note) note.textContent = `${maintPhotos.length} / 8 photos`;
+}
+
+function removeMaintPhoto(index) {
+  maintPhotos.splice(index, 1);
+  renderMaintPhotos();
+}
+
+function initMaintSignatures() {
+  ['maintTechSig', 'maintCustSig'].forEach(id => initCanvasSignature(id));
+}
+
+function initCanvasSignature(canvasId) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  let drawing = false;
+  function getPos(e) {
+    const rect = canvas.getBoundingClientRect();
+    const touch = e.touches ? e.touches[0] : e;
+    return { x: (touch.clientX - rect.left) * (canvas.width / rect.width), y: (touch.clientY - rect.top) * (canvas.height / rect.height) };
+  }
+  function start(e) { drawing = true; const p = getPos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); e.preventDefault(); }
+  function move(e) {
+    if (!drawing) return;
+    const p = getPos(e);
+    ctx.lineTo(p.x, p.y); ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.stroke();
+    e.preventDefault();
+  }
+  function end() { drawing = false; }
+  canvas.addEventListener('mousedown', start);
+  canvas.addEventListener('mousemove', move);
+  canvas.addEventListener('mouseup', end);
+  canvas.addEventListener('mouseleave', end);
+  canvas.addEventListener('touchstart', start, { passive: false });
+  canvas.addEventListener('touchmove', move, { passive: false });
+  canvas.addEventListener('touchend', end);
+}
+
+function clearCanvas(canvasId) {
+  const canvas = document.getElementById(canvasId);
+  if (canvas) canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+}
+
+function checkUpcomingServices() {
+  const all = JSON.parse(localStorage.getItem(MAINT_KEY) || '[]');
+  const upcoming = [];
+  const seen = new Set();
+  all.forEach(r => {
+    const key = (r.unit || r.serial || '').toLowerCase();
+    if (!key || seen.has(key)) return;
+    const current = parseFloat(r.hours) || 0;
+    const next = parseFloat(r.nextHours) || 0;
+    if (next > 0 && current > 0) {
+      const remaining = next - current;
+      if (remaining <= 100) {
+        upcoming.push({ ...r, remaining });
+        seen.add(key);
+      }
+    }
+  });
+  const banner = document.getElementById('upcomingServicesBanner');
+  const list = document.getElementById('upcomingServicesList');
+  if (!banner || !list) return;
+  if (upcoming.length) {
+    banner.classList.remove('hidden');
+    list.innerHTML = upcoming.map(u => `
+      <div style="margin:0.4rem 0;">
+        <strong>${escapeHtml(u.unit || u.serial)}</strong> — ${u.remaining <= 0 ? 'OVERDUE' : u.remaining.toFixed(1) + ' hrs remaining'}
+        (current ${u.hours}, due ${u.nextHours})
+      </div>
+    `).join('');
+  } else {
+    banner.classList.add('hidden');
+  }
+  window._upcomingServices = upcoming;
+}
+
+function emailUpcomingServices() {
+  const upcoming = window._upcomingServices || [];
+  if (!upcoming.length) return;
+  const lines = upcoming.map(u =>
+    `${u.unit || u.serial}: ${u.remaining <= 0 ? 'OVERDUE' : u.remaining.toFixed(1) + ' hrs remaining'} (current ${u.hours} / due ${u.nextHours}) — ${u.customer || ''} — Tech: ${u.tech || ''}`
+  ).join('\n');
+  const subject = 'Upcoming Services Within 100 Hours';
+  const body = `The following units are within 100 hours of scheduled service or overdue:\n\n${lines}\n\n---\nSent from N2TheStorm Maintenance Tracker`;
+  window.location.href = `mailto:Dave@n2thestorm.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
+function checkNextService() {
+  const current = parseFloat(document.getElementById('maintHours').value) || 0;
+  const next = parseFloat(document.getElementById('maintNextHours').value) || 0;
+  const box = document.getElementById('nextServiceReminder');
+  if (!box) return;
+  if (next > 0 && current > 0) {
+    const remaining = next - current;
+    if (remaining <= 0) {
+      box.classList.remove('hidden');
+      box.innerHTML = `⚠ Service is due or overdue (current: ${current}, due at: ${next})`;
+    } else if (remaining <= 50) {
+      box.classList.remove('hidden');
+      box.innerHTML = `Upcoming service in ${remaining.toFixed(1)} hours (due at ${next})`;
+    } else {
+      box.classList.add('hidden');
+    }
+  } else {
+    box.classList.add('hidden');
+  }
+}
+
+function saveMaintenance() {
+  const rec = {
+    id: currentMaintId || Date.now().toString(),
+    tech: document.getElementById('maintTech').value,
+    unit: document.getElementById('maintUnit').value,
+    serial: document.getElementById('maintSerial').value,
+    plate: document.getElementById('maintPlate').value,
+    hours: document.getElementById('maintHours').value,
+    nextHours: document.getElementById('maintNextHours').value,
+    fullService: document.getElementById('maintFullService').checked,
+    repair: document.getElementById('maintRepair').checked,
+    chargeBack: document.getElementById('maintChargeBack').checked,
+    chargeBackDetails: document.getElementById('maintChargeBackDetails').value,
+    scheduled: document.querySelector('input[name="maintScheduled"]:checked')?.value || '',
+    site: document.getElementById('maintSite').value,
+    gps: document.getElementById('maintGps').value,
+    customer: document.getElementById('maintCustomer').value,
+    rep: document.getElementById('maintRep').value,
+    dispatchedBy: document.getElementById('maintDispatchedBy').value,
+    dispatchTime: document.getElementById('maintDispatchTime').value,
+    leftTime: document.getElementById('maintLeftTime').value,
+    arrivalTime: document.getElementById('maintArrivalTime').value,
+    completeTime: document.getElementById('maintCompleteTime').value,
+    notifyArrival: document.querySelector('input[name="maintNotifyArrival"]:checked')?.value || '',
+    notifyDepart: document.querySelector('input[name="maintNotifyDepart"]:checked')?.value || '',
+    operable: document.querySelector('input[name="maintOperable"]:checked')?.value || '',
+    notOperableReason: document.getElementById('maintNotOperableReason').value,
+    notes: document.getElementById('maintNotes').value,
+    parts: [...maintParts],
+    photos: [...maintPhotos],
+    techSig: document.getElementById('maintTechSig').toDataURL(),
+    custSig: document.getElementById('maintCustSig').toDataURL(),
+    status: document.getElementById('maintStatus').value,
+    followUp: document.getElementById('maintFollowUp').checked,
+    followUpNotes: document.getElementById('maintFollowUpNotes').value,
+    savedAt: new Date().toISOString()
+  };
+  const all = JSON.parse(localStorage.getItem(MAINT_KEY) || '[]');
+  const idx = all.findIndex(r => r.id === rec.id);
+  if (idx >= 0) all[idx] = rec; else all.unshift(rec);
+  localStorage.setItem(MAINT_KEY, JSON.stringify(all));
+  currentMaintId = null;
+  clearMaintenanceForm();
+  renderMaintList();
+  checkUpcomingServices();
+  alert('Maintenance record saved.');
+}
+
+function clearMaintenanceForm() {
+  document.getElementById('maintenanceForm').reset();
+  document.getElementById('maintNotOperableFields').classList.add('hidden');
+  document.getElementById('maintChargeBackFields').classList.add('hidden');
+  maintParts = [];
+  renderMaintParts();
+  maintPhotos = [];
+  renderMaintPhotos();
+  clearCanvas('maintTechSig');
+  clearCanvas('maintCustSig');
+  document.getElementById('maintFollowUpFields').classList.add('hidden');
+  document.getElementById('nextServiceReminder').classList.add('hidden');
+  currentMaintId = null;
+}
+
+function renderMaintList() {
+  const all = JSON.parse(localStorage.getItem(MAINT_KEY) || '[]');
+  const container = document.getElementById('maintList');
+  if (!container) return;
+  container.innerHTML = all.length
+    ? '<h3>Saved Maintenance Records</h3><p class="small-note">Tap a record to open and edit it.</p>' + all.map(r => `
+        <div class="jsa-card" onclick="loadMaintenance('${r.id}')">
+          <strong>${escapeHtml(r.unit || 'No Unit')} — ${escapeHtml(r.tech || 'Unknown Tech')}</strong><br>
+          <span class="meta">${r.customer || ''} • ${new Date(r.savedAt).toLocaleString()}</span>
+        </div>
+      `).join('')
+    : '<p>No maintenance records yet.</p>';
+}
+
+function loadMaintenance(id) {
+  const all = JSON.parse(localStorage.getItem(MAINT_KEY) || '[]');
+  const r = all.find(x => x.id === id);
+  if (!r) return;
+  currentMaintId = id;
+  document.getElementById('maintTech').value = r.tech || '';
+  document.getElementById('maintUnit').value = r.unit || '';
+  document.getElementById('maintSerial').value = r.serial || '';
+  document.getElementById('maintPlate').value = r.plate || '';
+  document.getElementById('maintHours').value = r.hours || '';
+  document.getElementById('maintNextHours').value = r.nextHours || '';
+  document.getElementById('maintFullService').checked = !!r.fullService;
+  document.getElementById('maintRepair').checked = !!r.repair;
+  document.getElementById('maintChargeBack').checked = !!r.chargeBack;
+  document.getElementById('maintChargeBackDetails').value = r.chargeBackDetails || '';
+  document.getElementById('maintChargeBackFields').classList.toggle('hidden', !r.chargeBack);
+  if (r.scheduled) document.querySelector(`input[name="maintScheduled"][value="${r.scheduled}"]`).checked = true;
+  document.getElementById('maintSite').value = r.site || '';
+  document.getElementById('maintGps').value = r.gps || '';
+  document.getElementById('maintCustomer').value = r.customer || '';
+  document.getElementById('maintRep').value = r.rep || '';
+  document.getElementById('maintDispatchedBy').value = r.dispatchedBy || '';
+  document.getElementById('maintDispatchTime').value = r.dispatchTime || '';
+  document.getElementById('maintLeftTime').value = r.leftTime || '';
+  document.getElementById('maintArrivalTime').value = r.arrivalTime || '';
+  document.getElementById('maintCompleteTime').value = r.completeTime || '';
+  if (r.notifyArrival) document.querySelector(`input[name="maintNotifyArrival"][value="${r.notifyArrival}"]`).checked = true;
+  if (r.notifyDepart) document.querySelector(`input[name="maintNotifyDepart"][value="${r.notifyDepart}"]`).checked = true;
+  if (r.operable) {
+    document.querySelector(`input[name="maintOperable"][value="${r.operable}"]`).checked = true;
+    document.getElementById('maintNotOperableFields').classList.toggle('hidden', r.operable !== 'no');
+  }
+  document.getElementById('maintNotOperableReason').value = r.notOperableReason || '';
+  document.getElementById('maintNotes').value = r.notes || '';
+  maintParts = r.parts || [];
+  renderMaintParts();
+  maintPhotos = r.photos || [];
+  renderMaintPhotos();
+  if (r.techSig) {
+    const img = new Image();
+    img.onload = () => document.getElementById('maintTechSig').getContext('2d').drawImage(img, 0, 0);
+    img.src = r.techSig;
+  }
+  if (r.custSig) {
+    const img = new Image();
+    img.onload = () => document.getElementById('maintCustSig').getContext('2d').drawImage(img, 0, 0);
+    img.src = r.custSig;
+  }
+  document.getElementById('maintStatus').value = r.status || 'open';
+  document.getElementById('maintFollowUp').checked = !!r.followUp;
+  document.getElementById('maintFollowUpNotes').value = r.followUpNotes || '';
+  document.getElementById('maintFollowUpFields').classList.toggle('hidden', !r.followUp);
+  checkNextService();
+  updateMaintHistory();
+  showView('maintenance');
+  window.scrollTo(0, 0);
 }
 
 function forceUpdate() {
