@@ -314,6 +314,12 @@
         <div class="form-section">
           <h3>Equipment Identification</h3>
           <div class="field"><label>Technician Name</label><input type="text" id="maintTech" placeholder="Technician performing the work"></div>
+          <div class="field">
+            <label>Select Equipment</label>
+            <select id="maintEquipmentSelect">
+              <option value="">— Select equipment or enter manually —</option>
+            </select>
+          </div>
           <div class="field"><label>Unit #</label><input type="text" id="maintUnit" placeholder="Unit number"></div>
           <div class="field-row">
             <div class="field"><label>Serial #</label><input type="text" id="maintSerial"></div>
@@ -389,7 +395,7 @@
         <div class="form-section">
           <h3>Unit Status</h3>
           <div class="field">
-            <label>Is the unit operable?</label>
+            <label>Is the unit operable at time of arrival?</label>
             <div class="radio-group">
               <label><input type="radio" name="maintOperable" value="yes"> Yes</label>
               <label><input type="radio" name="maintOperable" value="no"> No</label>
@@ -397,6 +403,13 @@
           </div>
           <div id="maintNotOperableFields" class="hidden">
             <div class="field"><label>Why is it not operable? What needs to be done to complete the repair?</label><textarea id="maintNotOperableReason" rows="3"></textarea></div>
+          </div>
+          <div class="field">
+            <label>Is the unit operable after repair?</label>
+            <div class="radio-group">
+              <label><input type="radio" name="maintOperableAfter" value="yes"> Yes</label>
+              <label><input type="radio" name="maintOperableAfter" value="no"> No</label>
+            </div>
           </div>
         </div>
 
@@ -443,6 +456,8 @@
           <div id="maintFollowUpFields" class="hidden">
             <div class="field"><label>Follow-up Notes</label><textarea id="maintFollowUpNotes" rows="2" placeholder="What still needs to be done or checked..."></textarea></div>
           </div>
+          <div id="nextServiceReminder" class="hidden" style="margin-top:0.75rem; padding:0.75rem; background:#fef3c7; border-radius:8px; color:#92400e;"></div>
+        </div>
 
         <div class="form-actions">
           <button type="button" id="saveMaintBtn" class="btn primary">Save Maintenance Record</button>

@@ -59,6 +59,7 @@ document.addEventListener('DOMContentLoaded', () => {
   renderJourneyList();
   renderSavedTrailers();
   renderSavedLoadItems();
+  renderMaintEquipmentSelect();
   setupEventListeners();
   initSignaturePad();
   initLotoSignaturePad();
@@ -123,6 +124,8 @@ function setupEventListeners() {
 
   document.getElementById('saveMaintBtn').onclick = saveMaintenance;
   document.getElementById('newMaintBtn').onclick = clearMaintenanceForm;
+  document.getElementById('maintEquipmentSelect').onchange = fillFromEquipment;
+  renderMaintEquipmentSelect();
   document.getElementById('maintGpsBtn').onclick = () => fillGps('maintGps');
   document.getElementById('maintChargeBack').onchange = () => {
     document.getElementById('maintChargeBackFields').classList.toggle('hidden', !document.getElementById('maintChargeBack').checked);
@@ -918,45 +921,64 @@ function renderEquipmentLibrary() {
 }
 
 function showBuiltInDetail(type, index) {
-  const trailers = [
-    { name: "35' Gooseneck (Dual Axle)", maxWeight: '36000', maxLength: '35', maxWidth: '8.5', maxHeight: '13.5', notes: 'Dual axles rated 18,000 lbs each. Trailer empty weight 7,000 lbs. Usable payload approx. 29,000 lbs.' },
-    { name: 'Mesa Energy Solutions 350kW NG Generator (22L)', maxWeight: '16989', maxLength: '22', maxWidth: '8.6', maxHeight: '10.3', notes: 'Bumper-pull trailer-mounted natural gas generator. 350 kW prime, PSI 21.9L / 22L engine. Wet weight ~16,989 lbs. Enclosure approx. 260" L × 103" W × 124" H.' },
-    { name: 'Mesa Energy Solutions 250kW NG Generator (14L)', maxWeight: '15289', maxLength: '22', maxWidth: '8.6', maxHeight: '10.3', notes: 'Bumper-pull trailer-mounted natural gas generator. 250 kW prime, PSI 14.6L engine. Wet weight ~15,289 lbs. Enclosure approx. 260" L × 103" W × 124" H.' },
-    { name: 'Mesa Energy Solutions 170kW NG Generator (11L)', maxWeight: '10929', maxLength: '23', maxWidth: '7.3', maxHeight: '9.7', notes: 'Bumper-pull trailer-mounted natural gas generator. 170 kW prime, PSI 11.1L engine. Wet weight ~10,929 lbs. Enclosure approx. 272" L × 87" W × 116" H.' }
-  ];
-  const items = [
-    { name: 'Atlas Copco PAC H108 E (PAC 108E)', weight: '7350', length: '10', width: '6', height: '5.5', notes: '350 HP electric boost pump. Max flow 6,400 USgpm, max head 360 ft. 10" suction / 8" discharge. Dry weight ~7,350 lbs. Dimensions approx. 10 ft L × 6 ft W × 5.5 ft H.' },
-    { name: 'Atlas Copco PAC F44 E (PAC 44E)', weight: '2755', length: '7.8', width: '5.7', height: '3.7', notes: '50 HP electric pump. Max flow ~1,300 USgpm, max head ~150 ft. 4" suction / 4" discharge. Dry weight ~2,755 lbs. Dimensions approx. 7.8 ft L × 5.7 ft W × 3.7 ft H.' },
-    { name: 'Atlas Copco PAC F66 E (PAC 66E)', weight: '3415', length: '7.8', width: '5.7', height: '3.9', notes: '75 HP electric pump. Max flow 2,640 USgpm, max head 166 ft. 6" suction / 6" discharge. Dry weight ~3,415 lbs. Dimensions approx. 7.8 ft L × 5.7 ft W × 3.9 ft H.' },
-    { name: 'Atlas Copco PAC F88 E (PAC 88E)', weight: '4520', length: '7.8', width: '5.7', height: '4.4', notes: '150 HP electric pump. Max flow 3,950 USgpm, max head 200 ft. 8" suction / 8" discharge. Dry weight ~4,520 lbs. Dimensions approx. 7.8 ft L × 5.7 ft W × 4.4 ft H.' }
-  ];
-  const item = type === 'trailer' ? trailers[index] : items[index];
+  const key = type === 'trailer' ? 'n2thestorm_trailer_specs' : 'n2thestorm_load_items';
+  const list = JSON.parse(localStorage.getItem(key) || '[]');
+  const builtInNames = type === 'trailer'
+    ? ["35' Gooseneck (Dual Axle)", 'Mesa Energy Solutions 350kW NG Generator (22L)', 'Mesa Energy Solutions 250kW NG Generator (14L)', 'Mesa Energy Solutions 170kW NG Generator (11L)']
+    : ['Atlas Copco PAC H108 E (PAC 108E)', 'Atlas Copco PAC F44 E (PAC 44E)', 'Atlas Copco PAC F66 E (PAC 66E)', 'Atlas Copco PAC F88 E (PAC 88E)'];
+  const name = builtInNames[index];
+  const item = list.find(x => x.name === name) || { name };
   if (!item) return;
 
   const title = document.getElementById('modalTitle');
   const body = document.getElementById('modalBody');
   title.textContent = item.name;
 
-  let html = '';
+  let specs = '';
   if (type === 'trailer') {
-    html = `
+    specs = `
       <p><strong>Max Weight Capacity:</strong> ${item.maxWeight || '—'} lbs</p>
       <p><strong>Length:</strong> ${item.maxLength || '—'} ft</p>
       <p><strong>Width:</strong> ${item.maxWidth || '—'} ft</p>
       <p><strong>Height:</strong> ${item.maxHeight || '—'} ft</p>
-      ${item.notes ? `<p style="margin-top:0.75rem;">${escapeHtml(item.notes)}</p>` : ''}
     `;
   } else {
-    html = `
+    specs = `
       <p><strong>Weight:</strong> ${item.weight || '—'} lbs</p>
       <p><strong>Length:</strong> ${item.length || '—'} ft</p>
       <p><strong>Width:</strong> ${item.width || '—'} ft</p>
       <p><strong>Height:</strong> ${item.height || '—'} ft</p>
-      ${item.notes ? `<p style="margin-top:0.75rem;">${escapeHtml(item.notes)}</p>` : ''}
     `;
   }
-  body.innerHTML = html;
+
+  body.innerHTML = `
+    ${specs}
+    ${item.notes ? `<p style="margin-top:0.75rem;">${escapeHtml(item.notes)}</p>` : ''}
+    <hr style="margin:1rem 0; border:none; border-top:1px solid #e2e8f0;">
+    <h4>Identification Numbers</h4>
+    <div class="field"><label>Unit #</label><input type="text" id="eqUnit" value="${escapeHtml(item.unit || '')}"></div>
+    <div class="field"><label>Serial #</label><input type="text" id="eqSerial" value="${escapeHtml(item.serial || '')}"></div>
+    <div class="field"><label>License Plate #</label><input type="text" id="eqPlate" value="${escapeHtml(item.plate || '')}"></div>
+    <button type="button" class="btn primary" style="margin-top:0.75rem;" onclick="saveEquipmentIds('${type}', '${escapeHtml(name)}')">Save IDs</button>
+  `;
   document.getElementById('equipmentModal').classList.remove('hidden');
+}
+
+function saveEquipmentIds(type, name) {
+  const key = type === 'trailer' ? 'n2thestorm_trailer_specs' : 'n2thestorm_load_items';
+  const list = JSON.parse(localStorage.getItem(key) || '[]');
+  let item = list.find(x => x.name === name);
+  if (!item) {
+    item = { name };
+    list.push(item);
+  }
+  item.unit = document.getElementById('eqUnit').value.trim();
+  item.serial = document.getElementById('eqSerial').value.trim();
+  item.plate = document.getElementById('eqPlate').value.trim();
+  localStorage.setItem(key, JSON.stringify(list));
+  alert('Identification numbers saved.');
+  renderMaintEquipmentSelect();
+  closeEquipmentModal();
 }
 
 function showManageTrailers() {
@@ -1492,6 +1514,29 @@ function checkNextService() {
   }
 }
 
+function renderMaintEquipmentSelect() {
+  const select = document.getElementById('maintEquipmentSelect');
+  if (!select) return;
+  const trailers = JSON.parse(localStorage.getItem('n2thestorm_trailer_specs') || '[]');
+  const items = JSON.parse(localStorage.getItem('n2thestorm_load_items') || '[]');
+  const all = [...trailers, ...items];
+  select.innerHTML = '<option value="">— Select equipment or enter manually —</option>' +
+    all.map((eq, i) => `<option value="${i}">${escapeHtml(eq.name)}</option>`).join('');
+  window._maintEquipmentList = all;
+}
+
+function fillFromEquipment() {
+  const select = document.getElementById('maintEquipmentSelect');
+  const idx = select.value;
+  if (idx === '') return;
+  const eq = (window._maintEquipmentList || [])[idx];
+  if (!eq) return;
+  if (eq.unit) document.getElementById('maintUnit').value = eq.unit;
+  if (eq.serial) document.getElementById('maintSerial').value = eq.serial;
+  if (eq.plate) document.getElementById('maintPlate').value = eq.plate;
+  updateMaintHistory();
+}
+
 function saveMaintenance() {
   const rec = {
     id: currentMaintId || Date.now().toString(),
@@ -1518,6 +1563,7 @@ function saveMaintenance() {
     notifyArrival: document.querySelector('input[name="maintNotifyArrival"]:checked')?.value || '',
     notifyDepart: document.querySelector('input[name="maintNotifyDepart"]:checked')?.value || '',
     operable: document.querySelector('input[name="maintOperable"]:checked')?.value || '',
+    operableAfter: document.querySelector('input[name="maintOperableAfter"]:checked')?.value || '',
     notOperableReason: document.getElementById('maintNotOperableReason').value,
     notes: document.getElementById('maintNotes').value,
     parts: [...maintParts],
@@ -1601,6 +1647,7 @@ function loadMaintenance(id) {
     document.querySelector(`input[name="maintOperable"][value="${r.operable}"]`).checked = true;
     document.getElementById('maintNotOperableFields').classList.toggle('hidden', r.operable !== 'no');
   }
+  if (r.operableAfter) document.querySelector(`input[name="maintOperableAfter"][value="${r.operableAfter}"]`).checked = true;
   document.getElementById('maintNotOperableReason').value = r.notOperableReason || '';
   document.getElementById('maintNotes').value = r.notes || '';
   maintParts = r.parts || [];
