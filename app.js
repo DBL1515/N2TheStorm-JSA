@@ -231,32 +231,59 @@ function updateResidual(id, risk) {
   if (h) h.residualRisk = risk;
 }
 
-function addParticipant(name = '', role = '') {
+function addParticipant(name = '', role = '', signature = '') {
   const id = Date.now() + Math.random();
-  participants.push({ id, name, role });
+  participants.push({ id, name, role, signature });
   const div = document.createElement('div');
-  div.className = 'participant-row field-row';
+  div.className = 'participant-row';
+  div.style.marginBottom = '1rem';
   div.innerHTML = `
-    <input type="text" placeholder="Name" value="${name}" data-id="${id}" data-field="name">
-    <input type="text" placeholder="Role / Company" value="${role}" data-id="${id}" data-field="role">
-    <button type="button" class="btn small secondary" onclick="removeParticipant('${id}')">✕</button>
+    <div class="field-row">
+      <input type="text" placeholder="Name" value="${escapeHtml(name)}" data-id="${id}" data-field="name">
+      <input type="text" placeholder="Role / Company" value="${escapeHtml(role)}" data-id="${id}" data-field="role">
+      <button type="button" class="btn small secondary" onclick="removeParticipant('${id}')">✕</button>
+    </div>
+    <div class="field" style="margin-top:0.4rem;">
+      <label style="font-size:0.85rem;">Signature</label>
+      <canvas id="sig-${id}" width="350" height="100" class="signature-canvas" style="width:100%; max-width:350px;"></canvas>
+      <button type="button" class="btn small secondary" onclick="clearParticipantSig('${id}')">Clear Signature</button>
+    </div>
   `;
   document.getElementById('participantsContainer').appendChild(div);
   div.querySelectorAll('input').forEach(inp => {
     inp.addEventListener('input', updateParticipants);
   });
+  initCanvasSignature(`sig-${id}`);
+  if (signature) {
+    const canvas = document.getElementById(`sig-${id}`);
+    const img = new Image();
+    img.onload = () => canvas.getContext('2d').drawImage(img, 0, 0);
+    img.src = signature;
+  }
 }
 
 function updateParticipants() {
-  participants = Array.from(document.querySelectorAll('.participant-row')).map(row => ({
-    id: row.querySelector('input').dataset.id,
-    name: row.querySelector('[data-field="name"]').value,
-    role: row.querySelector('[data-field="role"]').value
-  })).filter(p => p.name.trim());
+  participants = Array.from(document.querySelectorAll('.participant-row')).map(row => {
+    const nameInp = row.querySelector('[data-field="name"]');
+    const id = nameInp.dataset.id;
+    const canvas = document.getElementById(`sig-${id}`);
+    return {
+      id,
+      name: nameInp.value,
+      role: row.querySelector('[data-field="role"]').value,
+      signature: canvas ? canvas.toDataURL('image/png') : ''
+    };
+  }).filter(p => p.name.trim());
 }
 
 function removeParticipant(id) {
   document.querySelector(`.participant-row input[data-id="${id}"]`).closest('.participant-row').remove();
+  updateParticipants();
+}
+
+function clearParticipantSig(id) {
+  const canvas = document.getElementById(`sig-${id}`);
+  if (canvas) canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
   updateParticipants();
 }
 
@@ -502,7 +529,12 @@ function showPreview() {
 
 function renderReport(data) {
   const ppeHtml = data.ppe.length ? data.ppe.map(p => `<span class="ppe-badge">${escapeHtml(p)}</span>`).join('') : '<em>None</em>';
-  const partHtml = data.participants.length ? data.participants.map(p => `${escapeHtml(p.name)} (${escapeHtml(p.role||'—')})`).join('<br>') : '—';
+  const partHtml = data.participants.length ? data.participants.map(p => `
+    <div style="margin-bottom:0.75rem;">
+      ${escapeHtml(p.name)} (${escapeHtml(p.role||'—')})
+      ${p.signature ? `<br><img src="${p.signature}" style="max-width:200px; height:60px; border:1px solid #e2e8f0; border-radius:4px; margin-top:0.25rem;">` : ''}
+    </div>
+  `).join('') : '—';
   const hazHtml = data.hazards.map(h => {
     const full = HAZARDS.find(x => x.id === h.id) || {};
     return `<tr>
@@ -618,7 +650,7 @@ function loadJsa(id) {
   // Participants
   document.getElementById('participantsContainer').innerHTML = '';
   participants = [];
-  (j.participants || []).forEach(p => addParticipant(p.name, p.role));
+  (j.participants || []).forEach(p => addParticipant(p.name, p.role, p.signature || ''));
   if (!j.participants || !j.participants.length) addParticipant();
 
   // Hazards
