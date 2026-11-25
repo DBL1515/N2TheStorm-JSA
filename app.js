@@ -123,6 +123,10 @@ function setupEventListeners() {
   });
 
   document.getElementById('saveMaintBtn').onclick = saveMaintenance;
+  ['maintTech', 'maintUnit', 'maintSite'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', () => el.classList.remove('required-missing'));
+  });
   document.getElementById('newMaintBtn').onclick = clearMaintenanceForm;
   document.getElementById('maintEquipmentSelect').onchange = fillFromEquipment;
   renderMaintEquipmentSelect();
@@ -149,6 +153,8 @@ function setupEventListeners() {
   document.getElementById('equipmentModal').onclick = (e) => {
     if (e.target.id === 'equipmentModal') closeEquipmentModal();
   };
+  const bulkBtn = document.getElementById('saveBulkIdsBtn');
+  if (bulkBtn) bulkBtn.onclick = saveBulkIds;
   renderEquipmentLibrary();
   document.getElementById('clearSignatureBtn').onclick = clearSignature;
   document.getElementById('clearLotoSignatureBtn').onclick = clearLotoSignature;
@@ -171,7 +177,7 @@ function showView(view) {
   if (view === 'loto') lotoView.classList.remove('hidden');
   if (view === 'journey') journeyView.classList.remove('hidden');
   if (view === 'feedback') feedbackView.classList.remove('hidden');
-  if (view === 'equipment') { equipmentView.classList.remove('hidden'); renderEquipmentLibrary(); }
+  if (view === 'equipment') { equipmentView.classList.remove('hidden'); renderEquipmentLibrary(); renderBulkEdit(); }
   if (view === 'maintenance') { maintenanceView.classList.remove('hidden'); renderMaintList(); checkUpcomingServices(); }
   window.scrollTo(0, 0);
 }
@@ -889,6 +895,60 @@ function seedDefaultEquipment() {
   localStorage.setItem(itemKey, JSON.stringify(existingItems));
 }
 
+function renderBulkEdit() {
+  const container = document.getElementById('bulkEditContainer');
+  if (!container) return;
+  const trailers = JSON.parse(localStorage.getItem('n2thestorm_trailer_specs') || '[]');
+  const items = JSON.parse(localStorage.getItem('n2thestorm_load_items') || '[]');
+  const all = [
+    ...trailers.map(t => ({ ...t, _type: 'trailer' })),
+    ...items.map(i => ({ ...i, _type: 'item' }))
+  ];
+  if (!all.length) {
+    container.innerHTML = '<p>No equipment loaded yet.</p>';
+    return;
+  }
+  container.innerHTML = all.map((eq, i) => `
+    <div class="field-row" style="align-items:center; margin-bottom:0.5rem; flex-wrap:wrap;" data-bulk-index="${i}" data-bulk-type="${eq._type}" data-bulk-name="${escapeHtml(eq.name)}">
+      <strong style="flex:2; min-width:140px;">${escapeHtml(eq.name)}</strong>
+      <input type="text" placeholder="Unit #" value="${escapeHtml(eq.unit || '')}" data-field="unit" style="flex:1; min-width:90px;">
+      <input type="text" placeholder="Serial #" value="${escapeHtml(eq.serial || '')}" data-field="serial" style="flex:1; min-width:90px;">
+      <input type="text" placeholder="Plate #" value="${escapeHtml(eq.plate || '')}" data-field="plate" style="flex:1; min-width:90px;">
+    </div>
+  `).join('');
+}
+
+function saveBulkIds() {
+  const rows = document.querySelectorAll('#bulkEditContainer [data-bulk-index]');
+  const trailerUpdates = {};
+  const itemUpdates = {};
+  rows.forEach(row => {
+    const type = row.dataset.bulkType;
+    const name = row.dataset.bulkName;
+    const unit = row.querySelector('[data-field="unit"]').value.trim();
+    const serial = row.querySelector('[data-field="serial"]').value.trim();
+    const plate = row.querySelector('[data-field="plate"]').value.trim();
+    const update = { unit, serial, plate };
+    if (type === 'trailer') trailerUpdates[name] = update;
+    else itemUpdates[name] = update;
+  });
+
+  const trailers = JSON.parse(localStorage.getItem('n2thestorm_trailer_specs') || '[]');
+  trailers.forEach(t => {
+    if (trailerUpdates[t.name]) Object.assign(t, trailerUpdates[t.name]);
+  });
+  localStorage.setItem('n2thestorm_trailer_specs', JSON.stringify(trailers));
+
+  const items = JSON.parse(localStorage.getItem('n2thestorm_load_items') || '[]');
+  items.forEach(i => {
+    if (itemUpdates[i.name]) Object.assign(i, itemUpdates[i.name]);
+  });
+  localStorage.setItem('n2thestorm_load_items', JSON.stringify(items));
+
+  alert('All identification numbers saved.');
+  renderMaintEquipmentSelect();
+}
+
 function renderEquipmentLibrary() {
   // Always show built-in equipment directly so it appears even if localStorage is stale
   const builtInTrailers = [
@@ -959,9 +1019,10 @@ function showBuiltInDetail(type, index) {
     <div class="field"><label>Unit #</label><input type="text" id="eqUnit" value="${escapeHtml(item.unit || '')}"></div>
     <div class="field"><label>Serial #</label><input type="text" id="eqSerial" value="${escapeHtml(item.serial || '')}"></div>
     <div class="field"><label>License Plate #</label><input type="text" id="eqPlate" value="${escapeHtml(item.plate || '')}"></div>
-    <button type="button" class="btn primary" style="margin-top:0.75rem;" onclick="saveEquipmentIds('${type}', '${escapeHtml(name)}')">Save IDs</button>
+    <button type="button" class="btn primary" style="margin-top:0.75rem;" id="saveEqIdsBtn">Save IDs</button>
   `;
   document.getElementById('equipmentModal').classList.remove('hidden');
+  document.getElementById('saveEqIdsBtn').onclick = () => saveEquipmentIds(type, name);
 }
 
 function saveEquipmentIds(type, name) {
@@ -1538,66 +1599,97 @@ function fillFromEquipment() {
 }
 
 function saveMaintenance() {
-  const rec = {
-    id: currentMaintId || Date.now().toString(),
-    tech: document.getElementById('maintTech').value,
-    unit: document.getElementById('maintUnit').value,
-    serial: document.getElementById('maintSerial').value,
-    plate: document.getElementById('maintPlate').value,
-    hours: document.getElementById('maintHours').value,
-    nextHours: document.getElementById('maintNextHours').value,
-    fullService: document.getElementById('maintFullService').checked,
-    repair: document.getElementById('maintRepair').checked,
-    chargeBack: document.getElementById('maintChargeBack').checked,
-    chargeBackDetails: document.getElementById('maintChargeBackDetails').value,
-    scheduled: document.querySelector('input[name="maintScheduled"]:checked')?.value || '',
-    site: document.getElementById('maintSite').value,
-    gps: document.getElementById('maintGps').value,
-    customer: document.getElementById('maintCustomer').value,
-    rep: document.getElementById('maintRep').value,
-    dispatchedBy: document.getElementById('maintDispatchedBy').value,
-    dispatchTime: document.getElementById('maintDispatchTime').value,
-    leftTime: document.getElementById('maintLeftTime').value,
-    arrivalTime: document.getElementById('maintArrivalTime').value,
-    completeTime: document.getElementById('maintCompleteTime').value,
-    notifyArrival: document.querySelector('input[name="maintNotifyArrival"]:checked')?.value || '',
-    notifyDepart: document.querySelector('input[name="maintNotifyDepart"]:checked')?.value || '',
-    operable: document.querySelector('input[name="maintOperable"]:checked')?.value || '',
-    operableAfter: document.querySelector('input[name="maintOperableAfter"]:checked')?.value || '',
-    notOperableReason: document.getElementById('maintNotOperableReason').value,
-    notes: document.getElementById('maintNotes').value,
-    parts: [...maintParts],
-    photos: [...maintPhotos],
-    techSig: document.getElementById('maintTechSig').toDataURL(),
-    custSig: document.getElementById('maintCustSig').toDataURL(),
-    status: document.getElementById('maintStatus').value,
-    followUp: document.getElementById('maintFollowUp').checked,
-    followUpNotes: document.getElementById('maintFollowUpNotes').value,
-    savedAt: new Date().toISOString()
-  };
-  const all = JSON.parse(localStorage.getItem(MAINT_KEY) || '[]');
-  const idx = all.findIndex(r => r.id === rec.id);
-  if (idx >= 0) all[idx] = rec; else all.unshift(rec);
-  localStorage.setItem(MAINT_KEY, JSON.stringify(all));
-  currentMaintId = null;
-  clearMaintenanceForm();
-  renderMaintList();
-  checkUpcomingServices();
-  alert('Maintenance record saved.');
+  // Clear previous highlights
+  document.querySelectorAll('.required-missing').forEach(el => el.classList.remove('required-missing'));
+
+  const required = [
+    { id: 'maintTech', label: 'Technician Name' },
+    { id: 'maintUnit', label: 'Unit #' },
+    { id: 'maintSite', label: 'Site Name' }
+  ];
+  const missing = [];
+  required.forEach(f => {
+    const el = document.getElementById(f.id);
+    if (el && !el.value.trim()) {
+      el.classList.add('required-missing');
+      missing.push(f.label);
+    }
+  });
+
+  if (missing.length) {
+    alert('Please fill in the highlighted fields:\n• ' + missing.join('\n• '));
+    document.querySelector('.required-missing')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
+
+  try {
+    const techCanvas = document.getElementById('maintTechSig');
+    const custCanvas = document.getElementById('maintCustSig');
+    const rec = {
+      id: currentMaintId || Date.now().toString(),
+      tech: document.getElementById('maintTech')?.value || '',
+      unit: document.getElementById('maintUnit')?.value || '',
+      serial: document.getElementById('maintSerial')?.value || '',
+      plate: document.getElementById('maintPlate')?.value || '',
+      hours: document.getElementById('maintHours')?.value || '',
+      nextHours: document.getElementById('maintNextHours')?.value || '',
+      fullService: !!document.getElementById('maintFullService')?.checked,
+      repair: !!document.getElementById('maintRepair')?.checked,
+      chargeBack: !!document.getElementById('maintChargeBack')?.checked,
+      chargeBackDetails: document.getElementById('maintChargeBackDetails')?.value || '',
+      scheduled: document.querySelector('input[name="maintScheduled"]:checked')?.value || '',
+      site: document.getElementById('maintSite')?.value || '',
+      gps: document.getElementById('maintGps')?.value || '',
+      customer: document.getElementById('maintCustomer')?.value || '',
+      rep: document.getElementById('maintRep')?.value || '',
+      dispatchedBy: document.getElementById('maintDispatchedBy')?.value || '',
+      dispatchTime: document.getElementById('maintDispatchTime')?.value || '',
+      leftTime: document.getElementById('maintLeftTime')?.value || '',
+      arrivalTime: document.getElementById('maintArrivalTime')?.value || '',
+      completeTime: document.getElementById('maintCompleteTime')?.value || '',
+      notifyArrival: document.querySelector('input[name="maintNotifyArrival"]:checked')?.value || '',
+      notifyDepart: document.querySelector('input[name="maintNotifyDepart"]:checked')?.value || '',
+      operable: document.querySelector('input[name="maintOperable"]:checked')?.value || '',
+      operableAfter: document.querySelector('input[name="maintOperableAfter"]:checked')?.value || '',
+      notOperableReason: document.getElementById('maintNotOperableReason')?.value || '',
+      notes: document.getElementById('maintNotes')?.value || '',
+      parts: [...(maintParts || [])],
+      photos: [...(maintPhotos || [])],
+      techSig: techCanvas ? techCanvas.toDataURL() : '',
+      custSig: custCanvas ? custCanvas.toDataURL() : '',
+      status: document.getElementById('maintStatus')?.value || 'open',
+      followUp: !!document.getElementById('maintFollowUp')?.checked,
+      followUpNotes: document.getElementById('maintFollowUpNotes')?.value || '',
+      savedAt: new Date().toISOString()
+    };
+    const all = JSON.parse(localStorage.getItem(MAINT_KEY) || '[]');
+    const idx = all.findIndex(r => r.id === rec.id);
+    if (idx >= 0) all[idx] = rec; else all.unshift(rec);
+    localStorage.setItem(MAINT_KEY, JSON.stringify(all));
+    currentMaintId = null;
+    clearMaintenanceForm();
+    renderMaintList();
+    checkUpcomingServices();
+    alert('Maintenance record saved.');
+  } catch (err) {
+    console.error(err);
+    alert('Could not save: ' + (err.message || 'Unknown error. Try removing photos if storage is full.'));
+  }
 }
 
 function clearMaintenanceForm() {
-  document.getElementById('maintenanceForm').reset();
-  document.getElementById('maintNotOperableFields').classList.add('hidden');
-  document.getElementById('maintChargeBackFields').classList.add('hidden');
+  const form = document.getElementById('maintenanceForm');
+  if (form) form.reset();
+  document.getElementById('maintNotOperableFields')?.classList.add('hidden');
+  document.getElementById('maintChargeBackFields')?.classList.add('hidden');
   maintParts = [];
   renderMaintParts();
   maintPhotos = [];
   renderMaintPhotos();
   clearCanvas('maintTechSig');
   clearCanvas('maintCustSig');
-  document.getElementById('maintFollowUpFields').classList.add('hidden');
-  document.getElementById('nextServiceReminder').classList.add('hidden');
+  document.getElementById('maintFollowUpFields')?.classList.add('hidden');
+  document.getElementById('nextServiceReminder')?.classList.add('hidden');
   currentMaintId = null;
 }
 
