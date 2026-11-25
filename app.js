@@ -7,6 +7,7 @@ const JOURNEY_KEY = 'n2thestorm_journey';
 const MAINT_KEY = 'n2thestorm_maintenance';
 let maintParts = [];
 let maintPhotos = []; // array of data URLs
+let currentMaintId = null;
 let maintTechSigPad = null;
 let maintCustSigPad = null;
 
