@@ -146,6 +146,7 @@ function setupEventListeners() {
   document.getElementById('maintNextHours').addEventListener('input', checkNextService);
   document.getElementById('emailUpcomingBtn').onclick = emailUpcomingServices;
   checkUpcomingServices();
+  initMaintSignatures();
   document.querySelectorAll('input[name="maintOperable"]').forEach(r => {
     r.onchange = () => {
       document.getElementById('maintNotOperableFields').classList.toggle('hidden', r.value !== 'no' || !r.checked);
